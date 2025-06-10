@@ -43,11 +43,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getChangedFilesFromGithubAPI = exports.getAllChangeTypeFiles = exports.getChangeTypeFiles = exports.getAllDiffFiles = exports.ChangeTypeEnum = exports.getRenamedFiles = exports.processChangedFiles = void 0;
+exports.getChangedFilesFromGithubAPI = exports.getAllChangeTypeFiles = exports.getChangeTypeFiles = exports.getAllDiffFiles = exports.GITHUB_API_STATUS_MAP = exports.ChangeTypeEnum = exports.getRenamedFiles = exports.processChangedFiles = void 0;
 const core = __importStar(__nccwpck_require__(7484));
 const github = __importStar(__nccwpck_require__(3228));
-const flatten_1 = __importDefault(__nccwpck_require__(7047));
 const utils_convert_path_1 = __importDefault(__nccwpck_require__(5252));
+const flatten_1 = __importDefault(__nccwpck_require__(7047));
 const micromatch_1 = __importDefault(__nccwpck_require__(8785));
 const path = __importStar(__nccwpck_require__(6928));
 const changedFilesOutput_1 = __nccwpck_require__(5148);
@@ -190,6 +190,15 @@ var ChangeTypeEnum;
     ChangeTypeEnum["Unmerged"] = "U";
     ChangeTypeEnum["Unknown"] = "X";
 })(ChangeTypeEnum || (exports.ChangeTypeEnum = ChangeTypeEnum = {}));
+exports.GITHUB_API_STATUS_MAP = {
+    added: ChangeTypeEnum.Added,
+    removed: ChangeTypeEnum.Deleted,
+    modified: ChangeTypeEnum.Modified,
+    renamed: ChangeTypeEnum.Renamed,
+    copied: ChangeTypeEnum.Copied,
+    changed: ChangeTypeEnum.TypeChanged,
+    unchanged: ChangeTypeEnum.Unmerged
+};
 const getAllDiffFiles = async ({ workingDirectory, diffSubmodule, diffResult, submodulePaths, outputRenamedFilesAsDeletedAndAdded, fetchAdditionalSubmoduleHistory, failOnInitialDiffError, failOnSubmoduleDiffError }) => {
     const files = await (0, utils_1.getAllChangedFiles)({
         cwd: workingDirectory,
@@ -326,7 +335,7 @@ const getAllChangeTypeFiles = async ({ inputs, changedFiles }) => {
 };
 exports.getAllChangeTypeFiles = getAllChangeTypeFiles;
 const getChangedFilesFromGithubAPI = async ({ inputs }) => {
-    var _a;
+    var _a, _b;
     const octokit = github.getOctokit(inputs.token, {
         baseUrl: inputs.apiUrl
     });
@@ -341,36 +350,75 @@ const getChangedFilesFromGithubAPI = async ({ inputs }) => {
         [ChangeTypeEnum.Unknown]: []
     };
     core.info('Getting changed files from GitHub API...');
-    const options = octokit.rest.pulls.listFiles.endpoint.merge({
-        owner: github.context.repo.owner,
-        repo: github.context.repo.repo,
-        pull_number: (_a = github.context.payload.pull_request) === null || _a === void 0 ? void 0 : _a.number,
-        per_page: 100
-    });
-    const paginatedResponse = await octokit.paginate(options);
-    core.info(`Found ${paginatedResponse.length} changed files from GitHub API`);
-    const statusMap = {
-        added: ChangeTypeEnum.Added,
-        removed: ChangeTypeEnum.Deleted,
-        modified: ChangeTypeEnum.Modified,
-        renamed: ChangeTypeEnum.Renamed,
-        copied: ChangeTypeEnum.Copied,
-        changed: ChangeTypeEnum.TypeChanged,
-        unchanged: ChangeTypeEnum.Unmerged
-    };
-    for await (const item of paginatedResponse) {
-        const changeType = statusMap[item.status] || ChangeTypeEnum.Unknown;
-        if (changeType === ChangeTypeEnum.Renamed) {
-            if (inputs.outputRenamedFilesAsDeletedAndAdded) {
-                changedFiles[ChangeTypeEnum.Deleted].push(item.previous_filename || '');
-                changedFiles[ChangeTypeEnum.Added].push(item.filename);
+    // If we're in a PR and you want to see changed files from the PR to another base, or another sha to the PR's base
+    // we can use the compare API instead of the PR API. This can be useful when you have a stack of PRs and a PR in
+    // the middle of the stack changed some files, and you want subsequent PRs to see the changes since the default
+    // branch instead of the PR's base. If there is a git directory, we can use that instead
+    if (((_a = github.context.payload.pull_request) === null || _a === void 0 ? void 0 : _a.number) &&
+        (inputs.baseSha || inputs.sha)) {
+        const headSha = inputs.sha || github.context.payload.pull_request.head.sha;
+        const baseSha = inputs.baseSha || github.context.payload.pull_request.base.sha;
+        // Check if base_sha and head_sha are identical
+        if (baseSha === headSha) {
+            core.error(`Similar commit hashes detected: base_sha: ${baseSha} is equivalent to the head_sha: ${headSha}.`);
+            core.error(`Please verify that both commits are valid, and increase the fetch_depth to a number higher than ${inputs.fetchDepth}.`);
+            throw new Error('Similar commit hashes detected.');
+        }
+        core.info(`Using commit compare API to get changed files between ${baseSha} and ${headSha}`);
+        const options = octokit.rest.repos.compareCommits.endpoint.merge({
+            owner: github.context.repo.owner,
+            repo: github.context.repo.repo,
+            base: baseSha,
+            head: headSha,
+            per_page: 100
+        });
+        const response = await octokit.request(options);
+        const files = response.data.files || [];
+        core.info(`Found ${files.length} changed files from GitHub API`);
+        core.info(`Files: ${JSON.stringify(files)}`);
+        for (const item of files) {
+            const changeType = exports.GITHUB_API_STATUS_MAP[item.status] || ChangeTypeEnum.Unknown;
+            if (changeType === ChangeTypeEnum.Unknown) {
+                core.warning(`Unknown change type: status=${item.status} filename=${item.filename} previous_filename=${item.previous_filename}`);
+            }
+            if (changeType === ChangeTypeEnum.Renamed) {
+                if (inputs.outputRenamedFilesAsDeletedAndAdded) {
+                    changedFiles[ChangeTypeEnum.Deleted].push(item.previous_filename || '');
+                    changedFiles[ChangeTypeEnum.Added].push(item.filename);
+                }
+                else {
+                    changedFiles[ChangeTypeEnum.Renamed].push(item.filename);
+                }
             }
             else {
-                changedFiles[ChangeTypeEnum.Renamed].push(item.filename);
+                changedFiles[changeType].push(item.filename);
             }
         }
-        else {
-            changedFiles[changeType].push(item.filename);
+    }
+    else {
+        // Use the pull request files endpoint as before
+        const options = octokit.rest.pulls.listFiles.endpoint.merge({
+            owner: github.context.repo.owner,
+            repo: github.context.repo.repo,
+            pull_number: (_b = github.context.payload.pull_request) === null || _b === void 0 ? void 0 : _b.number,
+            per_page: 100
+        });
+        const paginatedResponse = await octokit.paginate(options);
+        core.info(`Found ${paginatedResponse.length} changed files from GitHub API`);
+        for (const item of paginatedResponse) {
+            const changeType = exports.GITHUB_API_STATUS_MAP[item.status] || ChangeTypeEnum.Unknown;
+            if (changeType === ChangeTypeEnum.Renamed) {
+                if (inputs.outputRenamedFilesAsDeletedAndAdded) {
+                    changedFiles[ChangeTypeEnum.Deleted].push(item.previous_filename || '');
+                    changedFiles[ChangeTypeEnum.Added].push(item.filename);
+                }
+                else {
+                    changedFiles[ChangeTypeEnum.Renamed].push(item.filename);
+                }
+            }
+            else {
+                changedFiles[changeType].push(item.filename);
+            }
         }
     }
     return changedFiles;
@@ -1355,8 +1403,6 @@ exports.getSHAForPullRequestEvent = getSHAForPullRequestEvent;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.DEFAULT_VALUES_OF_UNSUPPORTED_API_INPUTS = void 0;
 exports.DEFAULT_VALUES_OF_UNSUPPORTED_API_INPUTS = {
-    sha: '',
-    baseSha: '',
     since: '',
     until: '',
     path: '.',
@@ -1868,6 +1914,12 @@ async function run() {
     core.debug(`Env: ${JSON.stringify(env, null, 2)}`);
     const inputs = (0, inputs_1.getInputs)();
     core.debug(`Inputs: ${JSON.stringify(inputs, null, 2)}`);
+    // Check if base_sha and sha are the same
+    if (inputs.baseSha && inputs.sha && inputs.baseSha === inputs.sha) {
+        core.error(`Similar commit hashes detected: base_sha: ${inputs.baseSha} is equivalent to the sha: ${inputs.sha}.`);
+        core.error(`Please verify that both commits are valid, and increase the fetch_depth to a number higher than ${inputs.fetchDepth}.`);
+        throw new Error('Similar commit hashes detected.');
+    }
     const workingDirectory = path_1.default.resolve(env.GITHUB_WORKSPACE || process.cwd(), inputs.useRestApi ? '.' : inputs.path);
     core.debug(`Working directory: ${workingDirectory}`);
     const hasGitDirectory = await (0, utils_1.hasLocalGitDirectory)({ workingDirectory });
@@ -1910,7 +1962,6 @@ async function run() {
         });
     }
 }
-// eslint-disable-next-line github/no-then
 run().catch(e => {
     core.setFailed(e.message || e);
     process.exit(1);
@@ -2100,8 +2151,8 @@ exports.exists = exists;
 async function* lineOfFileGenerator({ filePath, excludedFiles }) {
     const fileStream = (0, fs_1.createReadStream)(filePath);
     /* istanbul ignore next */
-    fileStream.on('error', error => {
-        throw error;
+    fileStream.on('error', _error => {
+        throw _error;
     });
     const rl = (0, readline_1.createInterface)({
         input: fileStream,
@@ -2551,7 +2602,7 @@ const getPreviousGitTag = async ({ cwd, tagsPattern, currentBranch, tagsIgnorePa
             });
             currentShaDate = new Date(currentShaDateOutput.trim());
         }
-        catch (error) {
+        catch (_error) {
             // Handle the case where the current branch doesn't exist
             // This might happen in detached head state
             core.warning(`Failed to get date for current branch ${currentBranch}`);
@@ -5102,91 +5153,6 @@ exports.getOctokitOptions = getOctokitOptions;
 
 /***/ }),
 
-/***/ 2057:
-/***/ ((module) => {
-
-"use strict";
-
-var __defProp = Object.defineProperty;
-var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-var __getOwnPropNames = Object.getOwnPropertyNames;
-var __hasOwnProp = Object.prototype.hasOwnProperty;
-var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
-};
-var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
-    for (let key of __getOwnPropNames(from))
-      if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-  }
-  return to;
-};
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
-
-// pkg/dist-src/index.js
-var dist_src_exports = {};
-__export(dist_src_exports, {
-  createTokenAuth: () => createTokenAuth
-});
-module.exports = __toCommonJS(dist_src_exports);
-
-// pkg/dist-src/auth.js
-var REGEX_IS_INSTALLATION_LEGACY = /^v1\./;
-var REGEX_IS_INSTALLATION = /^ghs_/;
-var REGEX_IS_USER_TO_SERVER = /^ghu_/;
-async function auth(token) {
-  const isApp = token.split(/\./).length === 3;
-  const isInstallation = REGEX_IS_INSTALLATION_LEGACY.test(token) || REGEX_IS_INSTALLATION.test(token);
-  const isUserToServer = REGEX_IS_USER_TO_SERVER.test(token);
-  const tokenType = isApp ? "app" : isInstallation ? "installation" : isUserToServer ? "user-to-server" : "oauth";
-  return {
-    type: "token",
-    token,
-    tokenType
-  };
-}
-
-// pkg/dist-src/with-authorization-prefix.js
-function withAuthorizationPrefix(token) {
-  if (token.split(/\./).length === 3) {
-    return `bearer ${token}`;
-  }
-  return `token ${token}`;
-}
-
-// pkg/dist-src/hook.js
-async function hook(token, request, route, parameters) {
-  const endpoint = request.endpoint.merge(
-    route,
-    parameters
-  );
-  endpoint.headers.authorization = withAuthorizationPrefix(token);
-  return request(endpoint);
-}
-
-// pkg/dist-src/index.js
-var createTokenAuth = function createTokenAuth2(token) {
-  if (!token) {
-    throw new Error("[@octokit/auth-token] No token passed to createTokenAuth");
-  }
-  if (typeof token !== "string") {
-    throw new Error(
-      "[@octokit/auth-token] Token passed to createTokenAuth is not a string"
-    );
-  }
-  token = token.replace(/^(token|bearer) +/i, "");
-  return Object.assign(auth.bind(null, token), {
-    hook: hook.bind(null, token)
-  });
-};
-// Annotate the CommonJS export names for ESM import in node:
-0 && (0);
-
-
-/***/ }),
-
 /***/ 8452:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
@@ -5217,10 +5183,10 @@ __export(dist_src_exports, {
 });
 module.exports = __toCommonJS(dist_src_exports);
 var import_universal_user_agent = __nccwpck_require__(3843);
-var import_before_after_hook = __nccwpck_require__(5029);
+var import_before_after_hook = __nccwpck_require__(2732);
 var import_request = __nccwpck_require__(8636);
-var import_graphql = __nccwpck_require__(5448);
-var import_auth_token = __nccwpck_require__(2057);
+var import_graphql = __nccwpck_require__(7);
+var import_auth_token = __nccwpck_require__(7864);
 
 // pkg/dist-src/version.js
 var VERSION = "5.2.0";
@@ -5350,163 +5316,6 @@ var Octokit = class {
     }
   }
 };
-// Annotate the CommonJS export names for ESM import in node:
-0 && (0);
-
-
-/***/ }),
-
-/***/ 5448:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-var __defProp = Object.defineProperty;
-var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-var __getOwnPropNames = Object.getOwnPropertyNames;
-var __hasOwnProp = Object.prototype.hasOwnProperty;
-var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
-};
-var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
-    for (let key of __getOwnPropNames(from))
-      if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-  }
-  return to;
-};
-var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
-
-// pkg/dist-src/index.js
-var index_exports = {};
-__export(index_exports, {
-  GraphqlResponseError: () => GraphqlResponseError,
-  graphql: () => graphql2,
-  withCustomRequest: () => withCustomRequest
-});
-module.exports = __toCommonJS(index_exports);
-var import_request3 = __nccwpck_require__(8636);
-var import_universal_user_agent = __nccwpck_require__(3843);
-
-// pkg/dist-src/version.js
-var VERSION = "7.1.1";
-
-// pkg/dist-src/with-defaults.js
-var import_request2 = __nccwpck_require__(8636);
-
-// pkg/dist-src/graphql.js
-var import_request = __nccwpck_require__(8636);
-
-// pkg/dist-src/error.js
-function _buildMessageForResponseErrors(data) {
-  return `Request failed due to following response errors:
-` + data.errors.map((e) => ` - ${e.message}`).join("\n");
-}
-var GraphqlResponseError = class extends Error {
-  constructor(request2, headers, response) {
-    super(_buildMessageForResponseErrors(response));
-    this.request = request2;
-    this.headers = headers;
-    this.response = response;
-    this.name = "GraphqlResponseError";
-    this.errors = response.errors;
-    this.data = response.data;
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, this.constructor);
-    }
-  }
-};
-
-// pkg/dist-src/graphql.js
-var NON_VARIABLE_OPTIONS = [
-  "method",
-  "baseUrl",
-  "url",
-  "headers",
-  "request",
-  "query",
-  "mediaType"
-];
-var FORBIDDEN_VARIABLE_OPTIONS = ["query", "method", "url"];
-var GHES_V3_SUFFIX_REGEX = /\/api\/v3\/?$/;
-function graphql(request2, query, options) {
-  if (options) {
-    if (typeof query === "string" && "query" in options) {
-      return Promise.reject(
-        new Error(`[@octokit/graphql] "query" cannot be used as variable name`)
-      );
-    }
-    for (const key in options) {
-      if (!FORBIDDEN_VARIABLE_OPTIONS.includes(key)) continue;
-      return Promise.reject(
-        new Error(
-          `[@octokit/graphql] "${key}" cannot be used as variable name`
-        )
-      );
-    }
-  }
-  const parsedOptions = typeof query === "string" ? Object.assign({ query }, options) : query;
-  const requestOptions = Object.keys(
-    parsedOptions
-  ).reduce((result, key) => {
-    if (NON_VARIABLE_OPTIONS.includes(key)) {
-      result[key] = parsedOptions[key];
-      return result;
-    }
-    if (!result.variables) {
-      result.variables = {};
-    }
-    result.variables[key] = parsedOptions[key];
-    return result;
-  }, {});
-  const baseUrl = parsedOptions.baseUrl || request2.endpoint.DEFAULTS.baseUrl;
-  if (GHES_V3_SUFFIX_REGEX.test(baseUrl)) {
-    requestOptions.url = baseUrl.replace(GHES_V3_SUFFIX_REGEX, "/api/graphql");
-  }
-  return request2(requestOptions).then((response) => {
-    if (response.data.errors) {
-      const headers = {};
-      for (const key of Object.keys(response.headers)) {
-        headers[key] = response.headers[key];
-      }
-      throw new GraphqlResponseError(
-        requestOptions,
-        headers,
-        response.data
-      );
-    }
-    return response.data.data;
-  });
-}
-
-// pkg/dist-src/with-defaults.js
-function withDefaults(request2, newDefaults) {
-  const newRequest = request2.defaults(newDefaults);
-  const newApi = (query, options) => {
-    return graphql(newRequest, query, options);
-  };
-  return Object.assign(newApi, {
-    defaults: withDefaults.bind(null, newRequest),
-    endpoint: newRequest.endpoint
-  });
-}
-
-// pkg/dist-src/index.js
-var graphql2 = withDefaults(import_request3.request, {
-  headers: {
-    "user-agent": `octokit-graphql.js/${VERSION} ${(0, import_universal_user_agent.getUserAgent)()}`
-  },
-  method: "POST",
-  url: "/graphql"
-});
-function withCustomRequest(customRequest) {
-  return withDefaults(customRequest, {
-    method: "POST",
-    url: "/graphql"
-  });
-}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (0);
 
@@ -8084,187 +7893,6 @@ legacyRestEndpointMethods.VERSION = VERSION;
 
 /***/ }),
 
-/***/ 5029:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-var register = __nccwpck_require__(604);
-var addHook = __nccwpck_require__(8878);
-var removeHook = __nccwpck_require__(9357);
-
-// bind with array of arguments: https://stackoverflow.com/a/21792913
-var bind = Function.bind;
-var bindable = bind.bind(bind);
-
-function bindApi(hook, state, name) {
-  var removeHookRef = bindable(removeHook, null).apply(
-    null,
-    name ? [state, name] : [state]
-  );
-  hook.api = { remove: removeHookRef };
-  hook.remove = removeHookRef;
-  ["before", "error", "after", "wrap"].forEach(function (kind) {
-    var args = name ? [state, kind, name] : [state, kind];
-    hook[kind] = hook.api[kind] = bindable(addHook, null).apply(null, args);
-  });
-}
-
-function HookSingular() {
-  var singularHookName = "h";
-  var singularHookState = {
-    registry: {},
-  };
-  var singularHook = register.bind(null, singularHookState, singularHookName);
-  bindApi(singularHook, singularHookState, singularHookName);
-  return singularHook;
-}
-
-function HookCollection() {
-  var state = {
-    registry: {},
-  };
-
-  var hook = register.bind(null, state);
-  bindApi(hook, state);
-
-  return hook;
-}
-
-var collectionHookDeprecationMessageDisplayed = false;
-function Hook() {
-  if (!collectionHookDeprecationMessageDisplayed) {
-    console.warn(
-      '[before-after-hook]: "Hook()" repurposing warning, use "Hook.Collection()". Read more: https://git.io/upgrade-before-after-hook-to-1.4'
-    );
-    collectionHookDeprecationMessageDisplayed = true;
-  }
-  return HookCollection();
-}
-
-Hook.Singular = HookSingular.bind();
-Hook.Collection = HookCollection.bind();
-
-module.exports = Hook;
-// expose constructors as a named property for TypeScript
-module.exports.Hook = Hook;
-module.exports.Singular = Hook.Singular;
-module.exports.Collection = Hook.Collection;
-
-
-/***/ }),
-
-/***/ 8878:
-/***/ ((module) => {
-
-module.exports = addHook;
-
-function addHook(state, kind, name, hook) {
-  var orig = hook;
-  if (!state.registry[name]) {
-    state.registry[name] = [];
-  }
-
-  if (kind === "before") {
-    hook = function (method, options) {
-      return Promise.resolve()
-        .then(orig.bind(null, options))
-        .then(method.bind(null, options));
-    };
-  }
-
-  if (kind === "after") {
-    hook = function (method, options) {
-      var result;
-      return Promise.resolve()
-        .then(method.bind(null, options))
-        .then(function (result_) {
-          result = result_;
-          return orig(result, options);
-        })
-        .then(function () {
-          return result;
-        });
-    };
-  }
-
-  if (kind === "error") {
-    hook = function (method, options) {
-      return Promise.resolve()
-        .then(method.bind(null, options))
-        .catch(function (error) {
-          return orig(error, options);
-        });
-    };
-  }
-
-  state.registry[name].push({
-    hook: hook,
-    orig: orig,
-  });
-}
-
-
-/***/ }),
-
-/***/ 604:
-/***/ ((module) => {
-
-module.exports = register;
-
-function register(state, name, method, options) {
-  if (typeof method !== "function") {
-    throw new Error("method for before hook must be a function");
-  }
-
-  if (!options) {
-    options = {};
-  }
-
-  if (Array.isArray(name)) {
-    return name.reverse().reduce(function (callback, name) {
-      return register.bind(null, state, name, callback, options);
-    }, method)();
-  }
-
-  return Promise.resolve().then(function () {
-    if (!state.registry[name]) {
-      return method(options);
-    }
-
-    return state.registry[name].reduce(function (method, registered) {
-      return registered.hook.bind(null, method, options);
-    }, method)();
-  });
-}
-
-
-/***/ }),
-
-/***/ 9357:
-/***/ ((module) => {
-
-module.exports = removeHook;
-
-function removeHook(state, name, method) {
-  if (!state.registry[name]) {
-    return;
-  }
-
-  var index = state.registry[name]
-    .map(function (registered) {
-      return registered.orig;
-    })
-    .indexOf(method);
-
-  if (index === -1) {
-    return;
-  }
-
-  state.registry[name].splice(index, 1);
-}
-
-
-/***/ }),
-
 /***/ 4552:
 /***/ (function(__unused_webpack_module, exports) {
 
@@ -9610,6 +9238,91 @@ function copyFile(srcFile, destFile, force) {
 
 /***/ }),
 
+/***/ 7864:
+/***/ ((module) => {
+
+"use strict";
+
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// pkg/dist-src/index.js
+var dist_src_exports = {};
+__export(dist_src_exports, {
+  createTokenAuth: () => createTokenAuth
+});
+module.exports = __toCommonJS(dist_src_exports);
+
+// pkg/dist-src/auth.js
+var REGEX_IS_INSTALLATION_LEGACY = /^v1\./;
+var REGEX_IS_INSTALLATION = /^ghs_/;
+var REGEX_IS_USER_TO_SERVER = /^ghu_/;
+async function auth(token) {
+  const isApp = token.split(/\./).length === 3;
+  const isInstallation = REGEX_IS_INSTALLATION_LEGACY.test(token) || REGEX_IS_INSTALLATION.test(token);
+  const isUserToServer = REGEX_IS_USER_TO_SERVER.test(token);
+  const tokenType = isApp ? "app" : isInstallation ? "installation" : isUserToServer ? "user-to-server" : "oauth";
+  return {
+    type: "token",
+    token,
+    tokenType
+  };
+}
+
+// pkg/dist-src/with-authorization-prefix.js
+function withAuthorizationPrefix(token) {
+  if (token.split(/\./).length === 3) {
+    return `bearer ${token}`;
+  }
+  return `token ${token}`;
+}
+
+// pkg/dist-src/hook.js
+async function hook(token, request, route, parameters) {
+  const endpoint = request.endpoint.merge(
+    route,
+    parameters
+  );
+  endpoint.headers.authorization = withAuthorizationPrefix(token);
+  return request(endpoint);
+}
+
+// pkg/dist-src/index.js
+var createTokenAuth = function createTokenAuth2(token) {
+  if (!token) {
+    throw new Error("[@octokit/auth-token] No token passed to createTokenAuth");
+  }
+  if (typeof token !== "string") {
+    throw new Error(
+      "[@octokit/auth-token] Token passed to createTokenAuth is not a string"
+    );
+  }
+  token = token.replace(/^(token|bearer) +/i, "");
+  return Object.assign(auth.bind(null, token), {
+    hook: hook.bind(null, token)
+  });
+};
+// Annotate the CommonJS export names for ESM import in node:
+0 && (0);
+
+
+/***/ }),
+
 /***/ 4471:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
@@ -9988,6 +9701,163 @@ function withDefaults(oldDefaults, newDefaults) {
 
 // pkg/dist-src/index.js
 var endpoint = withDefaults(null, DEFAULTS);
+// Annotate the CommonJS export names for ESM import in node:
+0 && (0);
+
+
+/***/ }),
+
+/***/ 7:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+"use strict";
+
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// pkg/dist-src/index.js
+var index_exports = {};
+__export(index_exports, {
+  GraphqlResponseError: () => GraphqlResponseError,
+  graphql: () => graphql2,
+  withCustomRequest: () => withCustomRequest
+});
+module.exports = __toCommonJS(index_exports);
+var import_request3 = __nccwpck_require__(8636);
+var import_universal_user_agent = __nccwpck_require__(3843);
+
+// pkg/dist-src/version.js
+var VERSION = "7.1.1";
+
+// pkg/dist-src/with-defaults.js
+var import_request2 = __nccwpck_require__(8636);
+
+// pkg/dist-src/graphql.js
+var import_request = __nccwpck_require__(8636);
+
+// pkg/dist-src/error.js
+function _buildMessageForResponseErrors(data) {
+  return `Request failed due to following response errors:
+` + data.errors.map((e) => ` - ${e.message}`).join("\n");
+}
+var GraphqlResponseError = class extends Error {
+  constructor(request2, headers, response) {
+    super(_buildMessageForResponseErrors(response));
+    this.request = request2;
+    this.headers = headers;
+    this.response = response;
+    this.name = "GraphqlResponseError";
+    this.errors = response.errors;
+    this.data = response.data;
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, this.constructor);
+    }
+  }
+};
+
+// pkg/dist-src/graphql.js
+var NON_VARIABLE_OPTIONS = [
+  "method",
+  "baseUrl",
+  "url",
+  "headers",
+  "request",
+  "query",
+  "mediaType"
+];
+var FORBIDDEN_VARIABLE_OPTIONS = ["query", "method", "url"];
+var GHES_V3_SUFFIX_REGEX = /\/api\/v3\/?$/;
+function graphql(request2, query, options) {
+  if (options) {
+    if (typeof query === "string" && "query" in options) {
+      return Promise.reject(
+        new Error(`[@octokit/graphql] "query" cannot be used as variable name`)
+      );
+    }
+    for (const key in options) {
+      if (!FORBIDDEN_VARIABLE_OPTIONS.includes(key)) continue;
+      return Promise.reject(
+        new Error(
+          `[@octokit/graphql] "${key}" cannot be used as variable name`
+        )
+      );
+    }
+  }
+  const parsedOptions = typeof query === "string" ? Object.assign({ query }, options) : query;
+  const requestOptions = Object.keys(
+    parsedOptions
+  ).reduce((result, key) => {
+    if (NON_VARIABLE_OPTIONS.includes(key)) {
+      result[key] = parsedOptions[key];
+      return result;
+    }
+    if (!result.variables) {
+      result.variables = {};
+    }
+    result.variables[key] = parsedOptions[key];
+    return result;
+  }, {});
+  const baseUrl = parsedOptions.baseUrl || request2.endpoint.DEFAULTS.baseUrl;
+  if (GHES_V3_SUFFIX_REGEX.test(baseUrl)) {
+    requestOptions.url = baseUrl.replace(GHES_V3_SUFFIX_REGEX, "/api/graphql");
+  }
+  return request2(requestOptions).then((response) => {
+    if (response.data.errors) {
+      const headers = {};
+      for (const key of Object.keys(response.headers)) {
+        headers[key] = response.headers[key];
+      }
+      throw new GraphqlResponseError(
+        requestOptions,
+        headers,
+        response.data
+      );
+    }
+    return response.data.data;
+  });
+}
+
+// pkg/dist-src/with-defaults.js
+function withDefaults(request2, newDefaults) {
+  const newRequest = request2.defaults(newDefaults);
+  const newApi = (query, options) => {
+    return graphql(newRequest, query, options);
+  };
+  return Object.assign(newApi, {
+    defaults: withDefaults.bind(null, newRequest),
+    endpoint: newRequest.endpoint
+  });
+}
+
+// pkg/dist-src/index.js
+var graphql2 = withDefaults(import_request3.request, {
+  headers: {
+    "user-agent": `octokit-graphql.js/${VERSION} ${(0, import_universal_user_agent.getUserAgent)()}`
+  },
+  method: "POST",
+  url: "/graphql"
+});
+function withCustomRequest(customRequest) {
+  return withDefaults(customRequest, {
+    method: "POST",
+    url: "/graphql"
+  });
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (0);
 
@@ -15843,7 +15713,7 @@ module.exports = toStrTag;
 
 /***/ }),
 
-/***/ 5986:
+/***/ 3605:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -16057,7 +15927,7 @@ module.exports = typedarray;
 
 // MODULES //
 
-var usePolyfill = __nccwpck_require__( 5986 );
+var usePolyfill = __nccwpck_require__( 3605 );
 var builtin = __nccwpck_require__( 1952 );
 var polyfill = __nccwpck_require__( 8390 );
 
@@ -16203,6 +16073,187 @@ function typeOf( v ) {
 // EXPORTS //
 
 module.exports = typeOf;
+
+
+/***/ }),
+
+/***/ 2732:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+var register = __nccwpck_require__(1063);
+var addHook = __nccwpck_require__(2027);
+var removeHook = __nccwpck_require__(9934);
+
+// bind with array of arguments: https://stackoverflow.com/a/21792913
+var bind = Function.bind;
+var bindable = bind.bind(bind);
+
+function bindApi(hook, state, name) {
+  var removeHookRef = bindable(removeHook, null).apply(
+    null,
+    name ? [state, name] : [state]
+  );
+  hook.api = { remove: removeHookRef };
+  hook.remove = removeHookRef;
+  ["before", "error", "after", "wrap"].forEach(function (kind) {
+    var args = name ? [state, kind, name] : [state, kind];
+    hook[kind] = hook.api[kind] = bindable(addHook, null).apply(null, args);
+  });
+}
+
+function HookSingular() {
+  var singularHookName = "h";
+  var singularHookState = {
+    registry: {},
+  };
+  var singularHook = register.bind(null, singularHookState, singularHookName);
+  bindApi(singularHook, singularHookState, singularHookName);
+  return singularHook;
+}
+
+function HookCollection() {
+  var state = {
+    registry: {},
+  };
+
+  var hook = register.bind(null, state);
+  bindApi(hook, state);
+
+  return hook;
+}
+
+var collectionHookDeprecationMessageDisplayed = false;
+function Hook() {
+  if (!collectionHookDeprecationMessageDisplayed) {
+    console.warn(
+      '[before-after-hook]: "Hook()" repurposing warning, use "Hook.Collection()". Read more: https://git.io/upgrade-before-after-hook-to-1.4'
+    );
+    collectionHookDeprecationMessageDisplayed = true;
+  }
+  return HookCollection();
+}
+
+Hook.Singular = HookSingular.bind();
+Hook.Collection = HookCollection.bind();
+
+module.exports = Hook;
+// expose constructors as a named property for TypeScript
+module.exports.Hook = Hook;
+module.exports.Singular = Hook.Singular;
+module.exports.Collection = Hook.Collection;
+
+
+/***/ }),
+
+/***/ 2027:
+/***/ ((module) => {
+
+module.exports = addHook;
+
+function addHook(state, kind, name, hook) {
+  var orig = hook;
+  if (!state.registry[name]) {
+    state.registry[name] = [];
+  }
+
+  if (kind === "before") {
+    hook = function (method, options) {
+      return Promise.resolve()
+        .then(orig.bind(null, options))
+        .then(method.bind(null, options));
+    };
+  }
+
+  if (kind === "after") {
+    hook = function (method, options) {
+      var result;
+      return Promise.resolve()
+        .then(method.bind(null, options))
+        .then(function (result_) {
+          result = result_;
+          return orig(result, options);
+        })
+        .then(function () {
+          return result;
+        });
+    };
+  }
+
+  if (kind === "error") {
+    hook = function (method, options) {
+      return Promise.resolve()
+        .then(method.bind(null, options))
+        .catch(function (error) {
+          return orig(error, options);
+        });
+    };
+  }
+
+  state.registry[name].push({
+    hook: hook,
+    orig: orig,
+  });
+}
+
+
+/***/ }),
+
+/***/ 1063:
+/***/ ((module) => {
+
+module.exports = register;
+
+function register(state, name, method, options) {
+  if (typeof method !== "function") {
+    throw new Error("method for before hook must be a function");
+  }
+
+  if (!options) {
+    options = {};
+  }
+
+  if (Array.isArray(name)) {
+    return name.reverse().reduce(function (callback, name) {
+      return register.bind(null, state, name, callback, options);
+    }, method)();
+  }
+
+  return Promise.resolve().then(function () {
+    if (!state.registry[name]) {
+      return method(options);
+    }
+
+    return state.registry[name].reduce(function (method, registered) {
+      return registered.hook.bind(null, method, options);
+    }, method)();
+  });
+}
+
+
+/***/ }),
+
+/***/ 9934:
+/***/ ((module) => {
+
+module.exports = removeHook;
+
+function removeHook(state, name, method) {
+  if (!state.registry[name]) {
+    return;
+  }
+
+  var index = state.registry[name]
+    .map(function (registered) {
+      return registered.orig;
+    })
+    .indexOf(method);
+
+  if (index === -1) {
+    return;
+  }
+
+  state.registry[name].splice(index, 1);
+}
 
 
 /***/ }),
@@ -17578,7 +17629,7 @@ module.exports = baseGetTag;
 
 /***/ }),
 
-/***/ 3605:
+/***/ 5986:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 var baseGetTag = __nccwpck_require__(9117),
@@ -17771,7 +17822,7 @@ module.exports = flatten;
 /***/ 541:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
-var baseIsArguments = __nccwpck_require__(3605),
+var baseIsArguments = __nccwpck_require__(5986),
     isObjectLike = __nccwpck_require__(1645);
 
 /** Used for built-in method references. */
@@ -35105,8 +35156,8 @@ module.exports = isObjectLike;
 
 const util = __nccwpck_require__(9023);
 const braces = __nccwpck_require__(748);
-const picomatch = __nccwpck_require__(4006);
-const utils = __nccwpck_require__(4059);
+const picomatch = __nccwpck_require__(6377);
+const utils = __nccwpck_require__(8604);
 
 const isEmptyString = v => v === '' || v === './';
 const hasBraces = v => {
@@ -35579,67 +35630,18 @@ module.exports = micromatch;
 
 /***/ }),
 
-/***/ 5560:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-var wrappy = __nccwpck_require__(8264)
-module.exports = wrappy(once)
-module.exports.strict = wrappy(onceStrict)
-
-once.proto = once(function () {
-  Object.defineProperty(Function.prototype, 'once', {
-    value: function () {
-      return once(this)
-    },
-    configurable: true
-  })
-
-  Object.defineProperty(Function.prototype, 'onceStrict', {
-    value: function () {
-      return onceStrict(this)
-    },
-    configurable: true
-  })
-})
-
-function once (fn) {
-  var f = function () {
-    if (f.called) return f.value
-    f.called = true
-    return f.value = fn.apply(this, arguments)
-  }
-  f.called = false
-  return f
-}
-
-function onceStrict (fn) {
-  var f = function () {
-    if (f.called)
-      throw new Error(f.onceError)
-    f.called = true
-    return f.value = fn.apply(this, arguments)
-  }
-  var name = fn.name || 'Function wrapped with `once`'
-  f.onceError = name + " shouldn't be called more than once"
-  f.called = false
-  return f
-}
-
-
-/***/ }),
-
-/***/ 4006:
+/***/ 6377:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-module.exports = __nccwpck_require__(8016);
+module.exports = __nccwpck_require__(9639);
 
 
 /***/ }),
 
-/***/ 5595:
+/***/ 9560:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -35826,14 +35828,14 @@ module.exports = {
 
 /***/ }),
 
-/***/ 8265:
+/***/ 7430:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const constants = __nccwpck_require__(5595);
-const utils = __nccwpck_require__(4059);
+const constants = __nccwpck_require__(9560);
+const utils = __nccwpck_require__(8604);
 
 /**
  * Constants
@@ -36925,17 +36927,17 @@ module.exports = parse;
 
 /***/ }),
 
-/***/ 8016:
+/***/ 9639:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
 const path = __nccwpck_require__(6928);
-const scan = __nccwpck_require__(1781);
-const parse = __nccwpck_require__(8265);
-const utils = __nccwpck_require__(4059);
-const constants = __nccwpck_require__(5595);
+const scan = __nccwpck_require__(6028);
+const parse = __nccwpck_require__(7430);
+const utils = __nccwpck_require__(8604);
+const constants = __nccwpck_require__(9560);
 const isObject = val => val && typeof val === 'object' && !Array.isArray(val);
 
 /**
@@ -37275,13 +37277,13 @@ module.exports = picomatch;
 
 /***/ }),
 
-/***/ 1781:
+/***/ 6028:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
 
 
-const utils = __nccwpck_require__(4059);
+const utils = __nccwpck_require__(8604);
 const {
   CHAR_ASTERISK,             /* * */
   CHAR_AT,                   /* @ */
@@ -37298,7 +37300,7 @@ const {
   CHAR_RIGHT_CURLY_BRACE,    /* } */
   CHAR_RIGHT_PARENTHESES,    /* ) */
   CHAR_RIGHT_SQUARE_BRACKET  /* ] */
-} = __nccwpck_require__(5595);
+} = __nccwpck_require__(9560);
 
 const isPathSeparator = code => {
   return code === CHAR_FORWARD_SLASH || code === CHAR_BACKWARD_SLASH;
@@ -37674,7 +37676,7 @@ module.exports = scan;
 
 /***/ }),
 
-/***/ 4059:
+/***/ 8604:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
@@ -37687,7 +37689,7 @@ const {
   REGEX_REMOVE_BACKSLASH,
   REGEX_SPECIAL_CHARS,
   REGEX_SPECIAL_CHARS_GLOBAL
-} = __nccwpck_require__(5595);
+} = __nccwpck_require__(9560);
 
 exports.isObject = val => val !== null && typeof val === 'object' && !Array.isArray(val);
 exports.hasRegexChars = str => REGEX_SPECIAL_CHARS.test(str);
@@ -37742,6 +37744,55 @@ exports.wrapOutput = (input, state = {}, options = {}) => {
   }
   return output;
 };
+
+
+/***/ }),
+
+/***/ 5560:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+var wrappy = __nccwpck_require__(8264)
+module.exports = wrappy(once)
+module.exports.strict = wrappy(onceStrict)
+
+once.proto = once(function () {
+  Object.defineProperty(Function.prototype, 'once', {
+    value: function () {
+      return once(this)
+    },
+    configurable: true
+  })
+
+  Object.defineProperty(Function.prototype, 'onceStrict', {
+    value: function () {
+      return onceStrict(this)
+    },
+    configurable: true
+  })
+})
+
+function once (fn) {
+  var f = function () {
+    if (f.called) return f.value
+    f.called = true
+    return f.value = fn.apply(this, arguments)
+  }
+  f.called = false
+  return f
+}
+
+function onceStrict (fn) {
+  var f = function () {
+    if (f.called)
+      throw new Error(f.onceError)
+    f.called = true
+    return f.value = fn.apply(this, arguments)
+  }
+  var name = fn.name || 'Function wrapped with `once`'
+  f.onceError = name + " shouldn't be called more than once"
+  f.called = false
+  return f
+}
 
 
 /***/ }),

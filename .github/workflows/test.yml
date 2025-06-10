@@ -6,7 +6,7 @@ permissions:
 on:
   push:
     branches:
-      - "**"
+      - '**'
   pull_request:
     types:
       - assigned
@@ -27,7 +27,7 @@ on:
       - auto_merge_enabled
       - auto_merge_disabled
     branches:
-      - "**"
+      - '**'
 
 jobs:
   build:
@@ -44,11 +44,14 @@ jobs:
           fetch-depth: 0
           repository: ${{ github.event.pull_request.head.repo.full_name }}
 
-      - name: Use Node.js 20.x
+      - name: Setup corepack
+        run: corepack enable && corepack install
+
+      - name: Setup node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           cache: 'yarn'
-          node-version: '20.x'
+          node-version-file: '.nvmrc'
 
       - name: Create coverage directory and clover.xml
         run: |
@@ -63,8 +66,7 @@ jobs:
         uses: tj-actions/eslint-changed-files@0cfcd35949a961d13e964a7c2a4971c0e89b68fc # v25.3.1
         if: github.event_name == 'pull_request'
         with:
-          config_path: ".eslintrc.json"
-          ignore_path: ".eslintignore"
+          config_path: 'eslint.config.mjs'
 
       - name: Run build and test
         run: |
@@ -131,16 +133,14 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-dir1.outputs) }}'
-        shell:
-          bash
+        shell: bash
 
       - name: List all modified files
         run: |
           for file in ${{ steps.changed-files-dir1.outputs.modified_files }}; do
             echo "$file"
           done
-        shell:
-          bash
+        shell: bash
 
       - name: Download build assets
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -165,16 +165,14 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-dir2.outputs) }}'
-        shell:
-          bash
+        shell: bash
 
       - name: List all modified files
         run: |
           for file in ${{ steps.changed-files-dir2.outputs.modified_files }}; do
             echo "$file"
           done
-        shell:
-          bash
+        shell: bash
 
   test-using-since-and-until:
     name: Test changed-files using since and until
@@ -199,41 +197,37 @@ jobs:
         id: changed-files-since
         uses: ./
         with:
-          since: "2022-08-19"
+          since: '2022-08-19'
 
       - name: Check output
         if: "!contains(steps.changed-files-since.outputs.all_changed_files, '.github/workflows/sync-release-version.yml')"
         run: |
           echo "Invalid output: Expected to include (.github/workflows/sync-release-version.yml) got (${{ steps.changed-files-since.outputs.all_changed_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
 
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-since.outputs) }}'
-        shell:
-          bash
+        shell: bash
 
       - name: Run changed-files until 2022-08-20
         id: changed-files-until
         uses: ./
         with:
-          until: "2022-08-20"
+          until: '2022-08-20'
 
       - name: Check output
         if: "!contains(steps.changed-files-until.outputs.all_changed_files, 'README.md')"
         run: |
           echo "Invalid output: Expected to include (README.md) got (${{ steps.changed-files-until.outputs.all_changed_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
 
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-until.outputs) }}'
-        shell:
-          bash
+        shell: bash
 
   test-similar-base-and-commit-sha:
     name: Test changed-files similar base and commit sha
@@ -272,8 +266,7 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files.outputs) }}'
-        shell:
-          bash
+        shell: bash
 
   test-using-branch-names-for-base-sha-and-sha-inputs:
     name: Test using branch names for base_sha and sha inputs
@@ -308,8 +301,7 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files.outputs) }}'
-        shell:
-          bash
+        shell: bash
 
   test-limited-commit-history:
     name: Test changed-files with limited commit history
@@ -349,8 +341,7 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files.outputs) }}'
-        shell:
-          bash
+        shell: bash
 
   test-pull-request-head-ref:
     name: Test changed-files with pull request head ref
@@ -378,8 +369,7 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files.outputs) }}'
-        shell:
-          bash
+        shell: bash
 
   test-pull-request-without-persist-credentials:
     name: Test changed-files with pull request without persist credentials
@@ -414,8 +404,7 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files.outputs) }}'
-        shell:
-          bash
+        shell: bash
 
   test-non-existent-base-sha:
     name: Test changed-files non existent base sha
@@ -438,13 +427,12 @@ jobs:
         uses: ./
         continue-on-error: true
         with:
-          base_sha: "4554456"
+          base_sha: '4554456'
 
       - name: Show output
         run: |
           echo "${{ toJSON(steps.changed-files.outputs) }}"
-        shell:
-          bash
+        shell: bash
 
       - name: Exit with 1 if no error is raised
         if: steps.changed-files.outcome != 'failure'
@@ -458,13 +446,12 @@ jobs:
         continue-on-error: true
         with:
           files: action.yml
-          base_sha: "4554456"
+          base_sha: '4554456'
 
       - name: Show output
         run: |
           echo "${{ toJSON(steps.changed-files-specific.outputs) }}"
-        shell:
-          bash
+        shell: bash
 
       - name: Exit with 1 if no error is raised
         if: steps.changed-files-specific.outcome != 'failure'
@@ -493,13 +480,12 @@ jobs:
         uses: ./
         continue-on-error: true
         with:
-          sha: "4774456"
+          sha: '4774456'
 
       - name: Show output
         run: |
           echo "${{ toJSON(steps.changed-files.outputs) }}"
-        shell:
-          bash
+        shell: bash
 
       - name: Exit with 1 if no error is raised
         if: steps.changed-files.outcome != 'failure'
@@ -513,13 +499,12 @@ jobs:
         continue-on-error: true
         with:
           files: action.yml
-          sha: "4774456"
+          sha: '4774456'
 
       - name: Show output
         run: |
           echo "${{ toJSON(steps.changed-files-specific.outputs) }}"
-        shell:
-          bash
+        shell: bash
 
       - name: Exit with 1 if no error is raised
         if: steps.changed-files-specific.outcome != 'failure'
@@ -556,8 +541,114 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files.outputs) }}'
-        shell:
-          bash
+        shell: bash
+
+  test-rest-api-with-base-sha:
+    name: Test changed-files with REST API using base_sha
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'push' && needs.build.outputs.files_changed != 'true'
+    permissions:
+      pull-requests: read
+    steps:
+      # checkout into dir1 then delete the .git directory
+      - name: Checkout into dir1
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          submodules: true
+          fetch-depth: 0
+          path: dir1
+
+      - name: Delete .git directory
+        run: rm -rf dir1/.git
+
+      - name: Download build assets
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: build-assets
+          path: dir1/dist
+
+      - name: Run changed-files with REST API and base_sha (no git directory)
+        id: changed-files
+        uses: ./dir1
+        with:
+          # in the past, when this ran on pull requests, it would use the PR api to get the changed
+          # files, and warn that base_sha wasn't supported. In that case, it assumed that the sha
+          # was the head sha of the PR.
+          # To test this, we'll force a sha and base_sha from the PR and because the .git directory
+          # doesn't exist, it will use the github compare api to get the changed files. This succeeds
+          # if it can get changes at all, which should match what's changed in this pull request.
+          base_sha: ${{ github.event.pull_request.base.sha }}
+          sha: ${{ github.event.pull_request.head.sha }}
+          token: ${{ github.token }}
+
+      - name: Show output
+        run: |
+          echo '${{ toJSON(steps.changed-files.outputs) }}'
+        shell: bash
+
+      - name: Verify the action succeeded
+        run: |
+          if [[ "${{ steps.changed-files.outcome }}" != "success" ]]; then
+            echo "Expected: (success) got ${{ steps.changed-files.outcome }}"
+            exit 1
+          fi
+        shell: bash
+
+  test-rest-api-with-base-sha-matches-pr-changes:
+    name: Test changed-files with REST API matches PR changes
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'push' && needs.build.outputs.files_changed != 'true'
+    permissions:
+      pull-requests: read
+    steps:
+      # checkout into dir1 then delete the .git directory
+      - name: Checkout into dir1
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          submodules: true
+          fetch-depth: 0
+          path: dir1
+
+      - name: Download build assets
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: build-assets
+          path: dir1/dist
+
+      - name: Run changed-files with compare api
+        id: changed-files
+        uses: ./dir1
+        with:
+          use_rest_api: true
+          token: ${{ github.token }}
+
+      - name: Run changed-files with PR api
+        id: changed-files-pr
+        uses: ./dir1
+        with:
+          use_rest_api: false
+          token: ${{ github.token }}
+
+      - name: Show output
+        run: |
+          echo '${{ toJSON(steps.changed-files.outputs) }}'
+        shell: bash
+
+      - name: Verify the changed files are the same
+        run: |
+          if [[ "${{ steps.changed-files.outputs.all_changed_files }}" != "${{ steps.changed-files-pr.outputs.all_changed_files }}" ]]; then
+            echo "Expected: (same) got different"
+            echo "Compare API:"
+            echo "${{ steps.changed-files.outputs.all_changed_files }}"
+            echo "PR API:"
+            echo "${{ steps.changed-files-pr.outputs.all_changed_files }}"
+            exit 1
+          fi
+        shell: bash
 
   test-dir-names-nested-folder:
     name: Test changed-files with dir-names in a nested folder
@@ -593,8 +684,7 @@ jobs:
       - name: Show output
         run: |
           echo "${{ toJSON(steps.changed-files.outputs) }}"
-        shell:
-          bash
+        shell: bash
 
   test-non-existing-repository:
     name: Test changed-files with non existing repository
@@ -635,7 +725,7 @@ jobs:
     needs: build
     if: needs.build.outputs.files_changed != 'true'
     permissions:
-      contents: read 
+      contents: read
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -659,8 +749,8 @@ jobs:
         id: changed-files
         uses: ./
         with:
-          base_sha: "85bd869"
-          sha: "adde7bb"
+          base_sha: '85bd869'
+          sha: 'adde7bb'
           fetch_depth: 60000
 
       - name: Verify added files
@@ -672,15 +762,14 @@ jobs:
       - name: Show output
         run: |
           echo "${{ toJSON(steps.changed-files.outputs) }}"
-        shell:
-          bash
+        shell: bash
 
       - name: Run changed-files excluding submodule
         id: changed-files-exclude-submodule
         uses: ./
         with:
-          base_sha: "85bd869"
-          sha: "adde7bb"
+          base_sha: '85bd869'
+          sha: 'adde7bb'
           fetch_depth: 60000
           exclude_submodules: true
 
@@ -693,8 +782,7 @@ jobs:
       - name: Show output
         run: |
           echo "${{ toJSON(steps.changed-files-exclude-submodule.outputs) }}"
-        shell:
-          bash
+        shell: bash
   test-yaml:
     name: Test changed-files with yaml
     runs-on: ubuntu-latest
@@ -733,8 +821,7 @@ jobs:
       - name: Show output
         run: |
           echo "${{ toJSON(steps.changed-files.outputs) }}"
-        shell:
-          bash
+        shell: bash
 
       - name: Run changed-files with files_yaml_from_source_file
         id: changed-files-from-source-file
@@ -746,8 +833,7 @@ jobs:
       - name: Show output
         run: |
           echo "${{ toJSON(steps.changed-files-from-source-file.outputs) }}"
-        shell:
-          bash
+        shell: bash
 
       - name: Run changed-files with files_yaml, files_ignore_yaml
         id: changed-files-ignore
@@ -759,13 +845,12 @@ jobs:
               - test/**.md
           files_ignore_yaml: |
             test:
-              - test/test.txt 
+              - test/test.txt
 
       - name: Show output
         run: |
           echo "${{ toJSON(steps.changed-files-ignore.outputs) }}"
-        shell:
-          bash
+        shell: bash
 
       - name: Run changed-files with files_yaml, json and write_output_files
         id: changed-files-json-write-output-files
@@ -780,15 +865,13 @@ jobs:
       - name: Show all outputs
         run: |
           echo "${{ toJSON(steps.changed-files-json-write-output-files.outputs) }}"
-        shell:
-          bash
+        shell: bash
 
       - name: Show all_changed_files output and list .github/outputs
         run: |
           echo '${{ toJSON(steps.changed-files-json-write-output-files.outputs.test_all_changed_files) }}'
           cat .github/outputs/test_all_changed_files.json
-        shell:
-          bash
+        shell: bash
 
   test-recover-deleted-file:
     name: Test changed-files recover deleted file
@@ -820,16 +903,15 @@ jobs:
         id: changed-files-recover-deleted-files
         uses: ./
         with:
-          base_sha: "fcdeb5b3d797752d95f6dbe98552a95c29dad338"
-          sha: "432e0c810c60ef1332850a971c5ec39022034b4c"
+          base_sha: 'fcdeb5b3d797752d95f6dbe98552a95c29dad338'
+          sha: '432e0c810c60ef1332850a971c5ec39022034b4c'
           recover_deleted_files: true
           fetch_depth: 60000
 
       - name: Show output
         run: |
           echo "${{ toJSON(steps.changed-files-recover-deleted-files.outputs) }}"
-        shell:
-          bash
+        shell: bash
 
       - name: Verify deleted files
         if: steps.changed-files-recover-deleted-files.outputs.deleted_files != 'test/test deleted.txt'
@@ -851,8 +933,8 @@ jobs:
         id: changed-files-recover-deleted-files-with-files
         uses: ./
         with:
-          base_sha: "fcdeb5b3d797752d95f6dbe98552a95c29dad338"
-          sha: "432e0c810c60ef1332850a971c5ec39022034b4c"
+          base_sha: 'fcdeb5b3d797752d95f6dbe98552a95c29dad338'
+          sha: '432e0c810c60ef1332850a971c5ec39022034b4c'
           files: |
             test/**
           recover_deleted_files: true
@@ -861,8 +943,7 @@ jobs:
       - name: Show output
         run: |
           echo "${{ toJSON(steps.changed-files-recover-deleted-files-with-files.outputs) }}"
-        shell:
-          bash
+        shell: bash
 
       - name: Verify deleted files
         if: steps.changed-files-recover-deleted-files-with-files.outputs.deleted_files != 'test/test deleted.txt'
@@ -884,8 +965,8 @@ jobs:
         id: changed-files-recover-deleted-files-with-files-yaml
         uses: ./
         with:
-          base_sha: "fcdeb5b3d797752d95f6dbe98552a95c29dad338"
-          sha: "432e0c810c60ef1332850a971c5ec39022034b4c"
+          base_sha: 'fcdeb5b3d797752d95f6dbe98552a95c29dad338'
+          sha: '432e0c810c60ef1332850a971c5ec39022034b4c'
           files_yaml: |
             test:
               - test/**.txt
@@ -896,8 +977,7 @@ jobs:
       - name: Show output
         run: |
           echo "${{ toJSON(steps.changed-files-recover-deleted-files-with-files-yaml.outputs) }}"
-        shell:
-          bash
+        shell: bash
 
       - name: Verify deleted files
         if: steps.changed-files-recover-deleted-files-with-files-yaml.outputs.test_deleted_files != 'test/test deleted.txt'
@@ -925,17 +1005,16 @@ jobs:
         id: changed-files-recover-deleted-files-to-destination
         uses: ./
         with:
-          base_sha: "fcdeb5b3d797752d95f6dbe98552a95c29dad338"
-          sha: "432e0c810c60ef1332850a971c5ec39022034b4c"
+          base_sha: 'fcdeb5b3d797752d95f6dbe98552a95c29dad338'
+          sha: '432e0c810c60ef1332850a971c5ec39022034b4c'
           recover_deleted_files: true
-          recover_deleted_files_to_destination: "deleted_files"
+          recover_deleted_files_to_destination: 'deleted_files'
           fetch_depth: 60000
 
       - name: Show output
         run: |
           echo "${{ toJSON(steps.changed-files-recover-deleted-files-to-destination.outputs) }}"
-        shell:
-          bash
+        shell: bash
 
       - name: Verify deleted files
         if: steps.changed-files-recover-deleted-files-to-destination.outputs.deleted_files != 'test/test deleted.txt'
@@ -956,16 +1035,15 @@ jobs:
         id: changed-files-recover-deleted-files-within-submodule
         uses: ./
         with:
-          base_sha: "3be651e99d3d4eae395694f6c6f3b9d18457f6c8"
-          sha: "d90c240f2ad4ec04d8f0f48e5ac290ad96ebe850"
+          base_sha: '3be651e99d3d4eae395694f6c6f3b9d18457f6c8'
+          sha: 'd90c240f2ad4ec04d8f0f48e5ac290ad96ebe850'
           recover_deleted_files: true
           fetch_depth: 60000
 
       - name: Show output
         run: |
           echo "${{ toJSON(steps.changed-files-recover-deleted-files-within-submodule.outputs) }}"
-        shell:
-          bash
+        shell: bash
 
       - name: Verify deleted files
         if: steps.changed-files-recover-deleted-files-within-submodule.outputs.deleted_files != 'test/demo/.github/FUNDING.yml'
@@ -1008,20 +1086,20 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-dir-names-deleted-files-include-only-deleted-dirs-single-file.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Check deleted_files output
         if: steps.changed-files-dir-names-deleted-files-include-only-deleted-dirs-single-file.outputs.deleted_files != ''
         run: |
           echo "Invalid output: Expected '' got (${{ steps.changed-files-dir-names-deleted-files-include-only-deleted-dirs-single-file.outputs.deleted_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
   test-dir-names-deleted-files-include-only-deleted-dirs-directory:
     name: Test dir names deleted files include only deleted dirs
     runs-on: ${{ matrix.platform }}
     needs: build
     strategy:
+      fail-fast: false
+      max-parallel: 4
       matrix:
         platform: [ubuntu-latest, macos-latest, windows-latest]
     if: needs.build.outputs.files_changed != 'true'
@@ -1047,22 +1125,19 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-dir-names-deleted-files-include-only-deleted-dirs-directory.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Check deleted_files output on non windows platform
         if: steps.changed-files-dir-names-deleted-files-include-only-deleted-dirs-directory.outputs.deleted_files != 'test/test3' && runner.os != 'Windows'
         run: |
           echo "Invalid output: Expected (test/test3) got (${{ steps.changed-files-dir-names-deleted-files-include-only-deleted-dirs-directory.outputs.deleted_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Check deleted_files output on windows platform
         if: "!contains(steps.changed-files-dir-names-deleted-files-include-only-deleted-dirs-directory.outputs.deleted_files, 'test\\test3') && runner.os == 'Windows'"
         run: |
           echo "Invalid output: Expected (test\\test3) got (${{ steps.changed-files-dir-names-deleted-files-include-only-deleted-dirs-directory.outputs.deleted_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with dir_names and dir_names_deleted_files_include_only_deleted_dirs with the test directory deleted returns posix path separator
         id: changed-files-dir-names-deleted-files-include-only-deleted-dirs-directory-posix-path-separator
         uses: ./
@@ -1076,22 +1151,19 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-dir-names-deleted-files-include-only-deleted-dirs-directory-posix-path-separator.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Check deleted_files output on non windows platform
         if: steps.changed-files-dir-names-deleted-files-include-only-deleted-dirs-directory-posix-path-separator.outputs.deleted_files != 'test/test3' && runner.os != 'Windows'
         run: |
           echo "Invalid output: Expected (test/test3) got (${{ steps.changed-files-dir-names-deleted-files-include-only-deleted-dirs-directory-posix-path-separator.outputs.deleted_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Check deleted_files output on windows platform
         if: "!contains(steps.changed-files-dir-names-deleted-files-include-only-deleted-dirs-directory-posix-path-separator.outputs.deleted_files, 'test/test3') && runner.os == 'Windows'"
         run: |
           echo "Invalid output: Expected (test/test3) got (${{ steps.changed-files-dir-names-deleted-files-include-only-deleted-dirs-directory-posix-path-separator.outputs.deleted_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
 
   test-since-last-remote-commit:
     name: Test changed-files since last remote commit
@@ -1105,7 +1177,7 @@ jobs:
       max-parallel: 4
       matrix:
         fetch-depth: [0, 1, 2]
-        
+
     steps:
       - name: Checkout branch
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -1114,7 +1186,7 @@ jobs:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           submodules: true
           fetch-depth: ${{ matrix.fetch-depth }}
-  
+
       - name: Download build assets
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -1142,8 +1214,7 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-since-last-remote-commit.outputs) }}'
-        shell:
-          bash
+        shell: bash
 
   test:
     name: Test changed-files
@@ -1180,8 +1251,7 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with dir name pattern
         id: changed-files-dir-name
         uses: ./
@@ -1190,8 +1260,7 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-dir-name.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with write_output_files
         id: changed-files-write-output-files
         uses: ./
@@ -1202,8 +1271,7 @@ jobs:
         run: |
           echo '${{ toJSON(steps.changed-files-write-output-files.outputs.all_changed_files) }}'
           cat .github/outputs/all_changed_files.json
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with include_all_old_new_renamed_files
         id: changed-files-all-old-new-renamed-files
         uses: ./
@@ -1212,42 +1280,37 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-all-old-new-renamed-files.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: List all modified files
         run: |
           for file in ${{ steps.changed-files.outputs.modified_files }}; do
             echo $file
           done
-        shell:
-          bash
+        shell: bash
       - name: Run step when README.md changes
         if: contains(steps.changed-files.outputs.modified_files, 'README.md')
         run: |
           echo "Your README.md has been modified ${{ steps.changed-files.outputs.modified_files }}."
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with quotepath disabled for single path
         id: changed-files-quotepath-specific
         uses: ./
         with:
           files: test/test-è.txt
-          quotepath: "false"
+          quotepath: 'false'
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-quotepath-specific.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with quotepath disabled
         id: changed-files-quotepath
         uses: ./
         with:
-          quotepath: "false"
+          quotepath: 'false'
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-quotepath.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with dir_names and dir_names_max_depth
         id: changed-files-dir-names-max-depth
         uses: ./
@@ -1255,28 +1318,25 @@ jobs:
           base_sha: ba788ed
           sha: 0a5b7c6
           fetch_depth: 60000
-          dir_names: "true"
+          dir_names: 'true'
           dir_names_max_depth: 3
-          dir_names_exclude_current_dir: "true"
+          dir_names_exclude_current_dir: 'true'
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-dir-names-max-depth.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Check dir_names output on non windows platform
         if: "!contains(steps.changed-files-dir-names-max-depth.outputs.all_changed_files, 'test/test2/test3') && runner.os != 'Windows'"
         run: |
           echo "Invalid output: Expected to include (test/test2/test3) got (${{ steps.changed-files-dir-names-max-depth.outputs.all_changed_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Check dir_names output on windows platform
         if: "!contains(steps.changed-files-dir-names-max-depth.outputs.all_changed_files, 'test\\test2\\test3') && runner.os == 'Windows'"
         run: |
           echo "Invalid output: Expected to not include (test\\test2\\test3) got (${{ steps.changed-files-dir-names-max-depth.outputs.all_changed_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with dir_names and dir_names_exclude_current_dir
         id: changed-files-dir-names-exclude-root
         uses: ./
@@ -1284,21 +1344,19 @@ jobs:
           base_sha: dddfbd69
           sha: ce8c1983
           fetch_depth: 60000
-          dir_names: "true"
-          dir_names_exclude_current_dir: "true"
+          dir_names: 'true'
+          dir_names_exclude_current_dir: 'true'
           dir_names_max_depth: 1
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-dir-names-exclude-root.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Check dir_names output
         if: steps.changed-files-dir-names-exclude-root.outputs.all_changed_files != '.github'
         run: |
           echo "Invalid output: Expected (.github) got (${{ steps.changed-files-dir-names-exclude-root.outputs.all_changed_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with dir_names
         id: changed-files-dir-names
         uses: ./
@@ -1306,19 +1364,17 @@ jobs:
           base_sha: d1c0ee4
           sha: 4d04215
           fetch_depth: 60000
-          dir_names: "true"
+          dir_names: 'true'
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-dir-names.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Check dir_names output
         if: steps.changed-files-dir-names.outputs.all_changed_files != 'test'
         run: |
           echo "Invalid output: Expected (test) got (${{ steps.changed-files-dir-names.outputs.all_changed_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with dir_names specific
         id: changed-files-dir-names-specific
         uses: ./
@@ -1331,15 +1387,13 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-dir-names-specific.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Check dir_names output
         if: steps.changed-files-dir-names-specific.outputs.all_changed_files != 'test'
         run: |
           echo "Invalid output: Expected (test) got (${{ steps.changed-files-dir-names-specific.outputs.all_changed_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with dir_names and dir_names_include_files with specific files
         id: changed-files-dir-names-specific-include-files
         uses: ./
@@ -1354,8 +1408,7 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-dir-names-specific-include-files.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Check dir_names output on non windows platform
         if: |
           (
@@ -1366,8 +1419,7 @@ jobs:
         run: |
           echo "Invalid output: Expected to include (test/test rename-1.txt) and (test) got (${{ steps.changed-files-dir-names-specific-include-files.outputs.all_changed_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Check dir_names output on windows platform
         if: |
           (
@@ -1378,8 +1430,7 @@ jobs:
         run: |
           echo "Invalid output: Expected to include (test\\test rename-1.txt) and (test) got (${{ steps.changed-files-dir-names-specific-include-files.outputs.all_changed_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with dir_names for specific files and an unmatched path
         id: changed-files-dir-names-specific-unmatched-path
         uses: ./
@@ -1393,8 +1444,7 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-dir-names-specific-unmatched-path.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Check dir_names output
         if: |
           (
@@ -1405,18 +1455,16 @@ jobs:
         run: |
           echo "Invalid output: Expected empty array and any_changed to be false got (${{ steps.changed-files-dir-names-specific-unmatched-path.outputs.all_changed_files }}) and (${{ steps.changed-files-dir-names-specific-unmatched-path.outputs.any_changed }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with forward slash separator
         id: changed-files-forward-slash
         uses: ./
         with:
-          separator: "/"
+          separator: '/'
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-forward-slash.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with newline separator
         id: changed-files-newline
         uses: ./
@@ -1425,18 +1473,16 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-newline.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with pipe separator
         id: changed-files-pipe
         uses: ./
         with:
-          separator: "|"
+          separator: '|'
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-pipe.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with json output
         id: changed-files-json
         uses: ./
@@ -1446,8 +1492,7 @@ jobs:
         run: |
           echo '${{ toJSON(steps.changed-files-json.outputs) }}'
           echo '${{ toJSON(steps.changed-files-json.outputs.all_changed_files) }}'
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with json unescaped format
         id: changed-files-json-unescaped
         uses: ./
@@ -1458,13 +1503,12 @@ jobs:
         run: |
           echo '${{ toJSON(steps.changed-files-json-unescaped.outputs) }}'
           echo '${{ toJSON(steps.changed-files-json-unescaped.outputs.all_changed_files) }}'
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with comma separator
         id: changed-files-comma
         uses: ./
         with:
-          separator: ","
+          separator: ','
       - name: List all modified files
         run: |
           IFS=$',' read -a MODIFIED_FILES_ARRAY <<< "${{ steps.changed-files-comma.outputs.modified_files }}"
@@ -1472,13 +1516,11 @@ jobs:
             echo $file
           done
           unset IFS
-        shell:
-          bash
+        shell: bash
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-comma.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with specific files from a source file using a newline separator
         id: changed-files-specific-newline-source-file
         uses: ./
@@ -1489,8 +1531,7 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-specific-newline-source-file.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files for old new filenames test rename 1
         id: changed-files-all-old-new-renamed-files-1
         uses: ./
@@ -1502,36 +1543,31 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-all-old-new-renamed-files-1.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Check all_old_new_renamed_files output on non windows platform
         if: "!contains(steps.changed-files-all-old-new-renamed-files-1.outputs.all_old_new_renamed_files, 'test/test rename 1.txt,test/test rename-1.txt') && runner.os != 'Windows'"
         run: |
           echo "Invalid output: Expected to include (test/test rename 1.txt,test/test rename-1.txt) got (${{ steps.changed-files-all-old-new-renamed-files-1.outputs.all_old_new_renamed_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Check all_old_new_renamed_files output on windows platform
         if: "!contains(steps.changed-files-all-old-new-renamed-files-1.outputs.all_old_new_renamed_files, 'test\\test rename 1.txt,test\\test rename-1.txt') && runner.os == 'Windows'"
         run: |
           echo "Invalid output: Expected to not include (test\\test rename 1.txt,test\\test rename-1.txt) got (${{ steps.changed-files-all-old-new-renamed-files-1.outputs.all_old_new_renamed_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Check the renamed_files output on non windows platform
         if: "!contains(steps.changed-files-all-old-new-renamed-files-1.outputs.renamed_files, 'test/test rename-1.txt') && runner.os != 'Windows'"
         run: |
           echo "Invalid output: Expected to include (test/test rename-1.txt) got (${{ steps.changed-files-all-old-new-renamed-files-1.outputs.renamed_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Check the renamed_files output on windows platform
         if: "!contains(steps.changed-files-all-old-new-renamed-files-1.outputs.renamed_files, 'test\\test rename-1.txt') && runner.os == 'Windows'"
         run: |
           echo "Invalid output: Expected to not include (test\\test rename-1.txt) got (${{ steps.changed-files-all-old-new-renamed-files-1.outputs.renamed_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files for old new filenames test rename 2
         id: changed-files-all-old-new-renamed-files-2
         uses: ./
@@ -1543,36 +1579,31 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-all-old-new-renamed-files-2.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Check all_old_new_renamed_files output on non windows platform
         if: "!contains(steps.changed-files-all-old-new-renamed-files-2.outputs.all_old_new_renamed_files, 'test/test rename 2.txt,test/test rename-2.txt') && runner.os != 'Windows'"
         run: |
           echo "Invalid output: Expected to include (test/test rename 2.txt test/test rename-2.txt) got (${{ steps.changed-files-all-old-new-renamed-files-2.outputs.all_old_new_renamed_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Check all_old_new_renamed_files output on windows platform
         if: "!contains(steps.changed-files-all-old-new-renamed-files-2.outputs.all_old_new_renamed_files, 'test\\test rename 2.txt,test\\test rename-2.txt') && runner.os == 'Windows'"
         run: |
           echo "Invalid output: Expected to not include (test\\test rename 2.txt test/test rename-2.txt) got (${{ steps.changed-files-all-old-new-renamed-files-2.outputs.all_old_new_renamed_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Check the renamed_files output on non windows platform
         if: "!contains(steps.changed-files-all-old-new-renamed-files-2.outputs.renamed_files, 'test/test rename-2.txt') && runner.os != 'Windows'"
         run: |
           echo "Invalid output: Expected to include (test/test rename-2.txt) got (${{ steps.changed-files-all-old-new-renamed-files-2.outputs.renamed_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Check the renamed_files output on windows platform
         if: "!contains(steps.changed-files-all-old-new-renamed-files-2.outputs.renamed_files, 'test\\test rename-2.txt') && runner.os == 'Windows'"
         run: |
           echo "Invalid output: Expected to not include (test\\test rename-2.txt) got (${{ steps.changed-files-all-old-new-renamed-files-2.outputs.renamed_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files for old new filenames test rename 2 output as deleted and added
         id: changed-files-all-old-new-renamed-files-2-output-as-deleted-and-added
         uses: ./
@@ -1585,50 +1616,43 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-all-old-new-renamed-files-2-output-as-deleted-and-added.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Check all_old_new_renamed_files output on non windows platform
         if: "!contains(steps.changed-files-all-old-new-renamed-files-2-output-as-deleted-and-added.outputs.all_old_new_renamed_files, 'test/test rename 2.txt,test/test rename-2.txt') && runner.os != 'Windows'"
         run: |
           echo "Invalid output: Expected to include (test/test rename 2.txt test/test rename-2.txt) got (${{ steps.changed-files-all-old-new-renamed-files-2-output-as-deleted-and-added.outputs.all_old_new_renamed_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Check all_old_new_renamed_files output on windows platform
         if: "!contains(steps.changed-files-all-old-new-renamed-files-2-output-as-deleted-and-added.outputs.all_old_new_renamed_files, 'test\\test rename 2.txt,test\\test rename-2.txt') && runner.os == 'Windows'"
         run: |
           echo "Invalid output: Expected to not include (test\\test rename 2.txt test\\test rename-2.txt) got (${{ steps.changed-files-all-old-new-renamed-files-2-output-as-deleted-and-added.outputs.all_old_new_renamed_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Check deleted_files output on non windows platform
         if: "!contains(steps.changed-files-all-old-new-renamed-files-2-output-as-deleted-and-added.outputs.deleted_files, 'test/test rename 2.txt') && runner.os != 'Windows'"
         run: |
           echo "Invalid output: Expected to include (test/test rename 2.txt) got (${{ steps.changed-files-all-old-new-renamed-files-2-output-as-deleted-and-added.outputs.deleted_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Check deleted_files output on windows platform
         if: "!contains(steps.changed-files-all-old-new-renamed-files-2-output-as-deleted-and-added.outputs.deleted_files, 'test\\test rename 2.txt') && runner.os == 'Windows'"
         run: |
           echo "Invalid output: Expected to not include (test\\test rename 2.txt) got (${{ steps.changed-files-all-old-new-renamed-files-2-output-as-deleted-and-added.outputs.deleted_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Check added_files output on non windows platform
         if: "!contains(steps.changed-files-all-old-new-renamed-files-2-output-as-deleted-and-added.outputs.added_files, 'test/test rename-2.txt') && runner.os != 'Windows'"
         run: |
           echo "Invalid output: Expected to include (test/test rename-2.txt) got (${{ steps.changed-files-all-old-new-renamed-files-2-output-as-deleted-and-added.outputs.added_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Check added_files output on windows platform
         if: "!contains(steps.changed-files-all-old-new-renamed-files-2-output-as-deleted-and-added.outputs.added_files, 'test\\test rename-2.txt') && runner.os == 'Windows'"
         run: |
           echo "Invalid output: Expected to not include (test\\test rename-2.txt) got (${{ steps.changed-files-all-old-new-renamed-files-2-output-as-deleted-and-added.outputs.added_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with specific files
         id: changed-files-specific
         uses: ./
@@ -1642,22 +1666,19 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-specific.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Check if a excluded file is not included in any_changed on non windows platform
         if: "contains(steps.changed-files-specific.outputs.all_changed_files, 'test/test/test.txt') && runner.os != 'Windows'"
         run: |
           echo "Invalid output: Expected not to include (test/test/test.txt) got (${{ steps.changed-files-specific.outputs.all_changed_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Check if a excluded file is not included in any_changed on windows platform
         if: "contains(steps.changed-files-specific.outputs.all_changed_files, 'test\\test\\test.txt') && runner.os == 'Windows'"
         run: |
           echo "Invalid output: Expected not to include (test\\test\\test.txt) got (${{ steps.changed-files-specific.outputs.all_changed_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Verify any_changed for specific files on non windows platform
         if: "!contains(steps.changed-files-specific.outputs.all_changed_files, 'action.yml') && !contains(steps.changed-files-specific.outputs.all_changed_files, '.github/workflows/test.yml') && !contains(steps.changed-files-specific.outputs.all_changed_files, 'test/test.txt') && runner.os != 'Windows'"
         run: |
@@ -1665,8 +1686,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific.outputs.any_changed }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Verify any_changed for specific files on windows platform
         if: "!contains(steps.changed-files-specific.outputs.all_changed_files, 'action.yml') && !contains(steps.changed-files-specific.outputs.all_changed_files, '.github\\workflows\\test.yml') && !contains(steps.changed-files-specific.outputs.all_changed_files, 'test\\test.txt') && runner.os == 'Windows'"
         run: |
@@ -1674,22 +1694,19 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific.outputs.any_changed }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Check if a excluded file is not included in any_modified on non windows platform
         if: "contains(steps.changed-files-specific.outputs.all_modified_files, 'test/test/test.txt') && runner.os != 'Windows'"
         run: |
           echo "Invalid output: Expected not to include (test/test/test.txt) got (${{ steps.changed-files-specific.outputs.all_modified_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Check if a excluded file is not included in any_modified on windows platform
         if: "contains(steps.changed-files-specific.outputs.all_modified_files, 'test\\test\\test.txt') && runner.os == 'Windows'"
         run: |
           echo "Invalid output: Expected not to include (test\\test\\test.txt) got (${{ steps.changed-files-specific.outputs.all_modified_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Verify any_modified for specific files on non windows platform
         if: "!contains(steps.changed-files-specific.outputs.all_modified_files, 'action.yml') && !contains(steps.changed-files-specific.outputs.all_modified_files, '.github/workflows/test.yml') && !contains(steps.changed-files-specific.outputs.all_modified_files, 'test/test.txt') && runner.os != 'Windows'"
         run: |
@@ -1697,8 +1714,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific.outputs.any_modified }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Verify any_modified for specific files on windows platform
         if: "!contains(steps.changed-files-specific.outputs.all_modified_files, 'action.yml') && !contains(steps.changed-files-specific.outputs.all_modified_files, '.github\\workflows\\test.yml') && !contains(steps.changed-files-specific.outputs.all_modified_files, 'test\\test.txt') && runner.os == 'Windows'"
         run: |
@@ -1706,22 +1722,19 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific.outputs.any_modified }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Check if an excluded file is included in deleted_files output on non windows platform
         if: "contains(steps.changed-files-specific.outputs.deleted_files, 'test/test/test.txt') && runner.os != 'Windows'"
         run: |
           echo "Invalid output: Expected not to include (test/test/test.txt) got (${{ steps.changed-files-specific.outputs.deleted_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Check if an excluded file is included in deleted_files output on windows platform
         if: "contains(steps.changed-files-specific.outputs.deleted_files, 'test\\test\\test.txt') && runner.os == 'Windows'"
         run: |
           echo "Invalid output: Expected not to include (test\\test\\test.txt) got (${{ steps.changed-files-specific.outputs.deleted_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Verify any_deleted for specific files on non windows platform
         if: "!contains(steps.changed-files-specific.outputs.deleted_files, 'action.yml') && !contains(steps.changed-files-specific.outputs.deleted_files, '.github/workflows/test.yml') && !contains(steps.changed-files-specific.outputs.deleted_files, 'test/test.txt') && runner.os != 'Windows'"
         run: |
@@ -1729,8 +1742,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific.outputs.any_deleted }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Verify any_deleted for specific files on windows platform
         if: "!contains(steps.changed-files-specific.outputs.deleted_files, 'action.yml') && !contains(steps.changed-files-specific.outputs.deleted_files, '.github\\workflows\\test.yml') && !contains(steps.changed-files-specific.outputs.deleted_files, 'test\\test.txt') && runner.os == 'Windows'"
         run: |
@@ -1738,8 +1750,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific.outputs.any_deleted }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with specific files comma check duplicates
         id: changed-files-specific-duplicate-output
         uses: ./
@@ -1757,8 +1768,7 @@ jobs:
             echo "Duplicate output: Expected "$UNIQUE_ALL_CHANGED_FILES" got $ALL_CHANGED_FILES"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Verify all_changed_and_modified_files files has no duplicates
         if: contains(steps.changed-files-specific-duplicate-output.outputs.all_changed_and_modified_files, 'get-changed-paths.sh')
         run: |
@@ -1769,8 +1779,7 @@ jobs:
             echo "Duplicate output: Expected "$UNIQUE_ALL_CHANGED_AND_MODIFIED_FILES" got $ALL_CHANGED_AND_MODIFIED_FILES"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Verify all_modified_files files has no duplicates
         if: contains(steps.changed-files-specific-duplicate-output.outputs.all_modified_files, 'get-changed-paths.sh')
         run: |
@@ -1781,8 +1790,7 @@ jobs:
             echo "Duplicate output: Expected "$UNIQUE_ALL_MODIFIED_FILES" got $ALL_MODIFIED_FILES"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with specific files comma separator
         id: changed-files-specific-comma
         uses: ./
@@ -1790,12 +1798,11 @@ jobs:
           files: |
             .github/workflows/test.yml
             action.yml
-          separator: ","
+          separator: ','
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-specific-comma.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Verify any_changed files comma separator on non windows platform
         if: "!contains(steps.changed-files-specific-comma.outputs.all_changed_files, 'action.yml') && !contains(steps.changed-files-specific-comma.outputs.all_changed_files, '.github/workflows/test.yml') && runner.os != 'Windows'"
         run: |
@@ -1803,8 +1810,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-comma.outputs.any_changed }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Verify any_changed files comma separator on windows platform
         if: "!contains(steps.changed-files-specific-comma.outputs.all_changed_files, 'action.yml') && !contains(steps.changed-files-specific-comma.outputs.all_changed_files, '.github\\workflows\\test.yml') && runner.os == 'Windows'"
         run: |
@@ -1812,8 +1818,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-comma.outputs.any_changed }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Verify any_modified files comma separator on non windows platform
         if: "!contains(steps.changed-files-specific-comma.outputs.all_modified_files, 'action.yml') && !contains(steps.changed-files-specific-comma.outputs.all_modified_files, '.github/workflows/test.yml') && runner.os != 'Windows'"
         run: |
@@ -1821,8 +1826,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-comma.outputs.any_modified }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Verify any_modified files comma separator on windows platform
         if: "!contains(steps.changed-files-specific-comma.outputs.all_modified_files, 'action.yml') && !contains(steps.changed-files-specific-comma.outputs.all_modified_files, '.github\\workflows\\test.yml') && runner.os == 'Windows'"
         run: |
@@ -1830,8 +1834,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-comma.outputs.any_modified }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Verify any_deleted files comma separator on non windows platform
         if: "!contains(steps.changed-files-specific-comma.outputs.deleted_files, 'action.yml') && !contains(steps.changed-files-specific-comma.outputs.deleted_files, '.github/workflows/test.yml') && runner.os != 'Windows'"
         run: |
@@ -1839,8 +1842,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-comma.outputs.any_deleted }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Verify any_deleted files comma separator on windows platform
         if: "!contains(steps.changed-files-specific-comma.outputs.deleted_files, 'action.yml') && !contains(steps.changed-files-specific-comma.outputs.deleted_files, '.github\\workflows\\test.yml') && runner.os == 'Windows'"
         run: |
@@ -1848,8 +1850,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-comma.outputs.any_deleted }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with specific files pipe separator
         id: changed-files-specific-pipe
         uses: ./
@@ -1857,12 +1858,11 @@ jobs:
           files: |
             **/test.yml
             action.yml
-          separator: "|"
+          separator: '|'
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-specific-pipe.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Verify any_changed files comma separator on non windows platform
         if: "!contains(steps.changed-files-specific-pipe.outputs.all_changed_files, 'action.yml') && !contains(steps.changed-files-specific-pipe.outputs.all_changed_files, '.github/workflows/test.yml') && runner.os != 'Windows'"
         run: |
@@ -1870,8 +1870,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-pipe.outputs.any_changed }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Verify any_changed files comma separator on windows platform
         if: "!contains(steps.changed-files-specific-pipe.outputs.all_changed_files, 'action.yml') && !contains(steps.changed-files-specific-pipe.outputs.all_changed_files, '.github\\workflows\\test.yml') && runner.os == 'Windows'"
         run: |
@@ -1879,8 +1878,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-pipe.outputs.any_changed }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Verify any_modified files comma separator on non windows platform
         if: "!contains(steps.changed-files-specific-pipe.outputs.all_modified_files, 'action.yml') && !contains(steps.changed-files-specific-pipe.outputs.all_modified_files, '.github/workflows/test.yml') && runner.os != 'Windows'"
         run: |
@@ -1888,8 +1886,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-pipe.outputs.any_modified }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Verify any_modified files comma separator on windows platform
         if: "!contains(steps.changed-files-specific-pipe.outputs.all_modified_files, 'action.yml') && !contains(steps.changed-files-specific-pipe.outputs.all_modified_files, '.github\\workflows\\test.yml') && runner.os == 'Windows'"
         run: |
@@ -1897,8 +1894,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-pipe.outputs.any_modified }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Verify any_deleted files comma separator on non windows platform
         if: "!contains(steps.changed-files-specific-pipe.outputs.deleted_files, 'action.yml') && !contains(steps.changed-files-specific-pipe.outputs.deleted_files, '.github/workflows/test.yml') && runner.os != 'Windows'"
         run: |
@@ -1906,8 +1902,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-pipe.outputs.any_deleted }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Verify any_deleted files comma separator on windows platform
         if: "!contains(steps.changed-files-specific-pipe.outputs.deleted_files, 'action.yml') && !contains(steps.changed-files-specific-pipe.outputs.deleted_files, '.github\\workflows\\test.yml') && runner.os == 'Windows'"
         run: |
@@ -1915,8 +1910,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-pipe.outputs.any_deleted }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with specific files forward slash separator
         id: changed-files-specific-forward-slash
         uses: ./
@@ -1924,12 +1918,11 @@ jobs:
           files: |
             .github/workflows/test.yml
             action.yml
-          separator: "/"
+          separator: '/'
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-specific-forward-slash.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Verify any_changed files forward slash separator on non windows platform
         if: "!contains(steps.changed-files-specific-forward-slash.outputs.all_changed_files, 'action.yml') && !contains(steps.changed-files-specific-forward-slash.outputs.all_changed_files, '.github/workflows/test.yml') && runner.os != 'Windows'"
         run: |
@@ -1937,8 +1930,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-forward-slash.outputs.any_changed }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Verify any_changed files forward slash separator on windows platform
         if: "!contains(steps.changed-files-specific-forward-slash.outputs.all_changed_files, 'action.yml') && !contains(steps.changed-files-specific-forward-slash.outputs.all_changed_files, '.github\\workflows\\test.yml') && runner.os == 'Windows'"
         run: |
@@ -1946,8 +1938,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-forward-slash.outputs.any_changed }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Verify any_modified files forward slash separator on non windows platform
         if: "!contains(steps.changed-files-specific-forward-slash.outputs.all_modified_files, 'action.yml') && !contains(steps.changed-files-specific-forward-slash.outputs.all_modified_files, '.github/workflows/test.yml') && runner.os != 'Windows'"
         run: |
@@ -1955,8 +1946,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-forward-slash.outputs.any_modified }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Verify any_modified files forward slash separator on windows platform
         if: "!contains(steps.changed-files-specific-forward-slash.outputs.all_modified_files, 'action.yml') && !contains(steps.changed-files-specific-forward-slash.outputs.all_modified_files, '.github\\workflows\\test.yml') && runner.os == 'Windows'"
         run: |
@@ -1964,8 +1954,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-forward-slash.outputs.any_modified }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Verify any_deleted files forward slash separator on non windows platform
         if: "!contains(steps.changed-files-specific-forward-slash.outputs.deleted_files, 'action.yml') && !contains(steps.changed-files-specific-forward-slash.outputs.deleted_files, '.github/workflows/test.yml') && runner.os != 'Windows'"
         run: |
@@ -1973,8 +1962,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-forward-slash.outputs.any_deleted }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Verify any_deleted files forward slash separator on windows platform
         if: "!contains(steps.changed-files-specific-forward-slash.outputs.deleted_files, 'action.yml') && !contains(steps.changed-files-specific-forward-slash.outputs.deleted_files, '.github\\workflows\\test.yml') && runner.os == 'Windows'"
         run: |
@@ -1982,8 +1970,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-forward-slash.outputs.any_deleted }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with specific files from a source file
         id: changed-files-specific-source-file
         uses: ./
@@ -1996,22 +1983,19 @@ jobs:
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-specific-source-file.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Check if a excluded file is not included in any_changed on non windows platform
         if: "contains(steps.changed-files-specific-source-file.outputs.all_changed_files, 'test/test/test.txt') && runner.os != 'Windows'"
         run: |
           echo "Invalid output: Expected not to include (test/test/test.txt) got (${{ steps.changed-files-specific-source-file.outputs.all_changed_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Check if a excluded file is not included in any_changed on windows platform
         if: "contains(steps.changed-files-specific-source-file.outputs.all_changed_files, 'test\\test\\test.txt') && runner.os == 'Windows'"
         run: |
           echo "Invalid output: Expected not to include (test\\test\\test.txt) got (${{ steps.changed-files-specific-source-file.outputs.all_changed_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Verify any_changed from source files on non windows platform
         if: |
           (
@@ -2029,22 +2013,19 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-source-file.outputs.any_changed }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Check if a excluded file is not included in any_modified on non windows platform
         if: "contains(steps.changed-files-specific-source-file.outputs.all_modified_files, 'test/test/test.txt') && runner.os != 'Windows'"
         run: |
           echo "Invalid output: Expected not to include (test/test/test.txt) got (${{ steps.changed-files-specific-source-file.outputs.all_modified_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Check if a excluded file is not included in any_modified on windows platform
         if: "contains(steps.changed-files-specific-source-file.outputs.all_modified_files, 'test\\test\\test.txt') && runner.os == 'Windows'"
         run: |
           echo "Invalid output: Expected not to include (test\\test\\test.txt) got (${{ steps.changed-files-specific-source-file.outputs.all_modified_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Verify any_modified from source files on non windows platform
         if: |
           (
@@ -2062,22 +2043,19 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-source-file.outputs.any_modified }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Check if a excluded file is not included in any_deleted on non windows platform
         if: "contains(steps.changed-files-specific-source-file.outputs.deleted_files, 'test/test/test.txt') && runner.os != 'Windows'"
         run: |
           echo "Invalid output: Expected not to include (test/test/test.txt) got (${{ steps.changed-files-specific-source-file.outputs.deleted_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Check if a excluded file is not included in any_deleted on windows platform
         if: contains(steps.changed-files-specific-source-file.outputs.deleted_files, 'test\\test\\test.txt')
         run: |
           echo "Invalid output: Expected not to include (test\\test\\test.txt) got (${{ steps.changed-files-specific-source-file.outputs.deleted_files }})"
           exit 1
-        shell:
-          bash
+        shell: bash
       - name: Verify any_deleted from source files on non windows platform
         if: |
           (
@@ -2095,25 +2073,22 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-source-file.outputs.any_deleted }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-specific-source-file.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with specific files from a source file using a comma separator
         id: changed-files-specific-comma-source-file
         uses: ./
         with:
           files_from_source_file: |
             test/changed-files-list.txt
-          separator: ","
+          separator: ','
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-specific-comma-source-file.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Verify any_changed files comma separator from source files on non windows platform
         if: |
           (
@@ -2130,8 +2105,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-comma-source-file.outputs.any_changed }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Verify any_modified files comma separator from source files on non windows platform
         if: |
           (
@@ -2148,8 +2122,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-comma-source-file.outputs.any_modified }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Get branch name
         id: branch-name
         uses: tj-actions/branch-names@dde14ac574a8b9b1cedc59a1cf312788af43d8d8 # v8.2.1
@@ -2170,8 +2143,7 @@ jobs:
         if: github.event_name == 'pull_request' && github.event.action != 'closed' && matrix.fetch-depth == 0
         run: |
           echo '${{ toJSON(steps.changed-files-custom-base-sha.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with custom sha
         id: changed-files-custom-sha
         if: github.event_name == 'pull_request' && github.event.action != 'closed'
@@ -2182,8 +2154,7 @@ jobs:
         if: github.event.action != 'closed'
         run: |
           echo '${{ toJSON(steps.changed-files-custom-sha.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with the pull request base sha and head sha
         id: changed-files-pull-request-base-sha-head-sha
         if: github.event_name == 'pull_request' && github.event.action != 'closed'
@@ -2195,8 +2166,7 @@ jobs:
         if: github.event.action != 'closed'
         run: |
           echo '${{ toJSON(steps.changed-files-pull-request-base-sha-head-sha.outputs) }}'
-        shell:
-          bash
+        shell: bash
       - name: Run changed-files with specific files (only-changed)
         id: changed-files-specific-only-changed
         uses: ./
@@ -2210,8 +2180,7 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-only-changed.outputs.only_changed }})"
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Verify only_deleted files
         if: steps.changed-files-specific-only-changed.outputs.other_deleted_files != ''
         run: |
@@ -2219,10 +2188,8 @@ jobs:
             echo "Invalid output: Expected (false) got (${{ steps.changed-files-specific-only-changed.outputs.only_deleted }})."
             exit 1
           fi
-        shell:
-          bash
+        shell: bash
       - name: Show output
         run: |
           echo '${{ toJSON(steps.changed-files-specific-only-changed.outputs) }}'
-        shell:
-          bash
+        shell: bash

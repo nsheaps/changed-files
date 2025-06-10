@@ -105,3 +105,4 @@ lib/**/*
 # IDEA
 .idea/
 
+.yarn/install-state.gz

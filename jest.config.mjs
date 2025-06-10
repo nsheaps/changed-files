@@ -1,4 +1,4 @@
-module.exports = {
+export default {
   clearMocks: true,
   moduleFileExtensions: ['js', 'ts'],
   testMatch: ['**/*.test.ts'],
@@ -7,7 +7,5 @@ module.exports = {
   },
   verbose: true,
   testTimeout: 10000,
-  setupFiles: [
-    "<rootDir>/jest/setupEnv.cjs"
-  ]
-};
+  setupFiles: ['<rootDir>/jest/setupEnv.cjs']
+}
