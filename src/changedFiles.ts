@@ -1,8 +1,8 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
 import type {RestEndpointMethodTypes} from '@octokit/rest'
-import flatten from 'lodash/flatten'
 import convertPath from '@stdlib/utils-convert-path'
+import flatten from 'lodash/flatten'
 import mm from 'micromatch'
 import * as path from 'path'
 import {setOutputsAndGetModifiedAndChangedFilesStatus} from './changedFilesOutput'
@@ -206,6 +206,16 @@ export enum ChangeTypeEnum {
   TypeChanged = 'T',
   Unmerged = 'U',
   Unknown = 'X'
+}
+
+export const GITHUB_API_STATUS_MAP: Record<string, ChangeTypeEnum> = {
+  added: ChangeTypeEnum.Added,
+  removed: ChangeTypeEnum.Deleted,
+  modified: ChangeTypeEnum.Modified,
+  renamed: ChangeTypeEnum.Renamed,
+  copied: ChangeTypeEnum.Copied,
+  changed: ChangeTypeEnum.TypeChanged,
+  unchanged: ChangeTypeEnum.Unmerged
 }
 
 export type ChangedFiles = {
@@ -451,42 +461,102 @@ export const getChangedFilesFromGithubAPI = async ({
 
   core.info('Getting changed files from GitHub API...')
 
-  const options = octokit.rest.pulls.listFiles.endpoint.merge({
-    owner: github.context.repo.owner,
-    repo: github.context.repo.repo,
-    pull_number: github.context.payload.pull_request?.number,
-    per_page: 100
-  })
+  // If we're in a PR and you want to see changed files from the PR to another base, or another sha to the PR's base
+  // we can use the compare API instead of the PR API. This can be useful when you have a stack of PRs and a PR in
+  // the middle of the stack changed some files, and you want subsequent PRs to see the changes since the default
+  // branch instead of the PR's base. If there is a git directory, we can use that instead
+  if (
+    github.context.payload.pull_request?.number &&
+    (inputs.baseSha || inputs.sha)
+  ) {
+    const headSha = inputs.sha || github.context.payload.pull_request.head.sha
+    const baseSha =
+      inputs.baseSha || github.context.payload.pull_request.base.sha
 
-  const paginatedResponse =
-    await octokit.paginate<
-      RestEndpointMethodTypes['pulls']['listFiles']['response']['data'][0]
-    >(options)
+    // Check if base_sha and head_sha are identical
+    if (baseSha === headSha) {
+      core.error(
+        `Similar commit hashes detected: base_sha: ${baseSha} is equivalent to the head_sha: ${headSha}.`
+      )
+      core.error(
+        `Please verify that both commits are valid, and increase the fetch_depth to a number higher than ${inputs.fetchDepth}.`
+      )
+      throw new Error('Similar commit hashes detected.')
+    }
 
-  core.info(`Found ${paginatedResponse.length} changed files from GitHub API`)
-  const statusMap: Record<string, ChangeTypeEnum> = {
-    added: ChangeTypeEnum.Added,
-    removed: ChangeTypeEnum.Deleted,
-    modified: ChangeTypeEnum.Modified,
-    renamed: ChangeTypeEnum.Renamed,
-    copied: ChangeTypeEnum.Copied,
-    changed: ChangeTypeEnum.TypeChanged,
-    unchanged: ChangeTypeEnum.Unmerged
-  }
+    core.info(
+      `Using commit compare API to get changed files between ${baseSha} and ${headSha}`
+    )
 
-  for await (const item of paginatedResponse) {
-    const changeType: ChangeTypeEnum =
-      statusMap[item.status] || ChangeTypeEnum.Unknown
+    const options = octokit.rest.repos.compareCommits.endpoint.merge({
+      owner: github.context.repo.owner,
+      repo: github.context.repo.repo,
+      base: baseSha,
+      head: headSha,
+      per_page: 100
+    })
 
-    if (changeType === ChangeTypeEnum.Renamed) {
-      if (inputs.outputRenamedFilesAsDeletedAndAdded) {
-        changedFiles[ChangeTypeEnum.Deleted].push(item.previous_filename || '')
-        changedFiles[ChangeTypeEnum.Added].push(item.filename)
-      } else {
-        changedFiles[ChangeTypeEnum.Renamed].push(item.filename)
+    const response = await octokit.request(options)
+    const files = response.data.files || []
+
+    core.info(`Found ${files.length} changed files from GitHub API`)
+    core.info(`Files: ${JSON.stringify(files)}`)
+
+    for (const item of files) {
+      const changeType: ChangeTypeEnum =
+        GITHUB_API_STATUS_MAP[item.status] || ChangeTypeEnum.Unknown
+
+      if (changeType === ChangeTypeEnum.Unknown) {
+        core.warning(
+          `Unknown change type: status=${item.status} filename=${item.filename} previous_filename=${item.previous_filename}`
+        )
       }
-    } else {
-      changedFiles[changeType].push(item.filename)
+
+      if (changeType === ChangeTypeEnum.Renamed) {
+        if (inputs.outputRenamedFilesAsDeletedAndAdded) {
+          changedFiles[ChangeTypeEnum.Deleted].push(
+            item.previous_filename || ''
+          )
+          changedFiles[ChangeTypeEnum.Added].push(item.filename)
+        } else {
+          changedFiles[ChangeTypeEnum.Renamed].push(item.filename)
+        }
+      } else {
+        changedFiles[changeType].push(item.filename)
+      }
+    }
+  } else {
+    // Use the pull request files endpoint as before
+    const options = octokit.rest.pulls.listFiles.endpoint.merge({
+      owner: github.context.repo.owner,
+      repo: github.context.repo.repo,
+      pull_number: github.context.payload.pull_request?.number,
+      per_page: 100
+    })
+
+    const paginatedResponse =
+      await octokit.paginate<
+        RestEndpointMethodTypes['pulls']['listFiles']['response']['data'][0]
+      >(options)
+
+    core.info(`Found ${paginatedResponse.length} changed files from GitHub API`)
+
+    for (const item of paginatedResponse) {
+      const changeType: ChangeTypeEnum =
+        GITHUB_API_STATUS_MAP[item.status] || ChangeTypeEnum.Unknown
+
+      if (changeType === ChangeTypeEnum.Renamed) {
+        if (inputs.outputRenamedFilesAsDeletedAndAdded) {
+          changedFiles[ChangeTypeEnum.Deleted].push(
+            item.previous_filename || ''
+          )
+          changedFiles[ChangeTypeEnum.Added].push(item.filename)
+        } else {
+          changedFiles[ChangeTypeEnum.Renamed].push(item.filename)
+        }
+      } else {
+        changedFiles[changeType].push(item.filename)
+      }
     }
   }
 
