@@ -2,11 +2,11 @@ import * as core from '@actions/core'
 import * as github from '@actions/github'
 import path from 'path'
 import {
-  processChangedFiles,
   ChangeTypeEnum,
   getAllDiffFiles,
   getChangedFilesFromGithubAPI,
-  getRenamedFiles
+  getRenamedFiles,
+  processChangedFiles
 } from './changedFiles'
 import {
   DiffResult,
@@ -233,6 +233,17 @@ export async function run(): Promise<void> {
 
   const inputs = getInputs()
   core.debug(`Inputs: ${JSON.stringify(inputs, null, 2)}`)
+
+  // Check if base_sha and sha are the same
+  if (inputs.baseSha && inputs.sha && inputs.baseSha === inputs.sha) {
+    core.error(
+      `Similar commit hashes detected: base_sha: ${inputs.baseSha} is equivalent to the sha: ${inputs.sha}.`
+    )
+    core.error(
+      `Please verify that both commits are valid, and increase the fetch_depth to a number higher than ${inputs.fetchDepth}.`
+    )
+    throw new Error('Similar commit hashes detected.')
+  }
 
   const workingDirectory = path.resolve(
     env.GITHUB_WORKSPACE || process.cwd(),

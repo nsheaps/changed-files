@@ -1,8 +1,6 @@
 import {Inputs} from './inputs'
 
 export const DEFAULT_VALUES_OF_UNSUPPORTED_API_INPUTS: Partial<Inputs> = {
-  sha: '',
-  baseSha: '',
   since: '',
   until: '',
   path: '.',
