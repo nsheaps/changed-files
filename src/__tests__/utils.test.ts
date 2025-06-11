@@ -603,9 +603,9 @@ describe('utils test', () => {
         includeAllOldNewRenamedFiles: false,
         oldNewSeparator: ',',
         oldNewFilesSeparator: ' ',
-        sha: '1313123',
+        sha: '',
         baseSha: '',
-        since: '',
+        since: '1234',
         until: '',
         path: '.',
         quotepath: true,
@@ -652,20 +652,47 @@ describe('utils test', () => {
       })
 
       expect(coreWarningSpy).toHaveBeenCalledWith(
-        'Input "sha" is not supported when using GitHub\'s REST API to get changed files'
+        'Input "since" is not supported when using GitHub\'s REST API to get changed files'
       )
 
       expect(coreWarningSpy).toHaveBeenCalledTimes(1)
     })
   })
   describe('getPreviousGitTag', () => {
-    // Check if the environment variable GITHUB_REPOSITORY_OWNER is 'tj-actions'
-    const shouldSkip = !!process.env.GITHUB_EVENT_PULL_REQUEST_HEAD_REPO_FORK
+    // Mock exec.getExecOutput for all tests in this describe block
+    beforeEach(() => {
+      jest
+        .spyOn(exec, 'getExecOutput')
+        .mockImplementation(async (command, args: string[] = []) => {
+          if (command === 'git' && args[0] === 'tag') {
+            return {
+              stdout:
+                'v1.0.1|f0751de6af436d4e79016e2041cf6400e0833653|2021-01-02T00:00:00Z\nv1.0.0|f0751de6af436d4e79016e2041cf6400e0833653|2021-01-01T00:00:00Z',
+              stderr: '',
+              exitCode: 0
+            }
+          }
+          if (command === 'git' && args[0] === 'show') {
+            return {
+              stdout: '2021-01-02T00:00:00Z',
+              stderr: '',
+              exitCode: 0
+            }
+          }
+          return {
+            stdout: '',
+            stderr: '',
+            exitCode: 0
+          }
+        })
+    })
+
+    afterEach(() => {
+      jest.restoreAllMocks()
+    })
+
     // Function returns the second-latest tag and its SHA
     it('should return the second latest tag and its SHA when multiple tags are present', async () => {
-      if (shouldSkip) {
-        return
-      }
       const result = await getPreviousGitTag({
         cwd: '.',
         tagsPattern: '*',
@@ -677,11 +704,9 @@ describe('utils test', () => {
         sha: 'f0751de6af436d4e79016e2041cf6400e0833653'
       })
     })
+
     // Tags are filtered by a specified pattern when 'tagsPattern' is provided
     it('should filter tags by the specified pattern', async () => {
-      if (shouldSkip) {
-        return
-      }
       const result = await getPreviousGitTag({
         cwd: '.',
         tagsPattern: 'v1.*',
@@ -693,11 +718,9 @@ describe('utils test', () => {
         sha: 'f0751de6af436d4e79016e2041cf6400e0833653'
       })
     })
+
     // Tags are excluded by a specified ignore pattern when 'tagsIgnorePattern' is provided
     it('should exclude tags by the specified ignore pattern', async () => {
-      if (shouldSkip) {
-        return
-      }
       const result = await getPreviousGitTag({
         cwd: '.',
         tagsPattern: '*',
