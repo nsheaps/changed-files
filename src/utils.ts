@@ -166,8 +166,8 @@ async function* lineOfFileGenerator({
 }): AsyncIterableIterator<string> {
   const fileStream = createReadStream(filePath)
   /* istanbul ignore next */
-  fileStream.on('error', error => {
-    throw error
+  fileStream.on('error', _error => {
+    throw _error
   })
   const rl = createInterface({
     input: fileStream,
@@ -875,7 +875,7 @@ export const getPreviousGitTag = async ({
         }
       )
       currentShaDate = new Date(currentShaDateOutput.trim())
-    } catch (error) {
+    } catch (_error) {
       // Handle the case where the current branch doesn't exist
       // This might happen in detached head state
       core.warning(`Failed to get date for current branch ${currentBranch}`)
