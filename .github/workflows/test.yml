@@ -596,6 +596,84 @@ jobs:
           fi
         shell: bash
 
+  test-rest-api-with-base-sha-and-sha:
+    name: Test changed-files with REST API using base_sha and sha
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && needs.build.outputs.files_changed != 'true'
+    permissions:
+      contents: read
+    steps:
+      # checkout into dir1 then delete the .git directory
+      - name: Checkout into dir1
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          submodules: true
+          fetch-depth: 0
+          path: dir1
+
+      - name: Delete .git directory
+        run: rm -rf dir1/.git
+
+      - name: Download build assets
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: build-assets
+          path: dir1/dist
+
+      - name: Run changed-files with REST API and base_sha (no git directory)
+        id: changed-files-all-old-new-renamed-files-1
+        uses: ./dir1
+        with:
+          base_sha: d1c0ee4
+          sha: 4d04215
+          token: ${{ github.token }}
+
+      - name: Show output
+        run: |
+          echo '${{ toJSON(steps.changed-files-all-old-new-renamed-files-1.outputs) }}'
+        shell: bash
+        # here
+      - name: Check all_old_new_renamed_files output on non windows platform
+        if: "!contains(steps.changed-files-all-old-new-renamed-files-1.outputs.all_old_new_renamed_files, 'test/test rename 1.txt,test/test rename-1.txt') && runner.os != 'Windows'"
+        run: |
+          echo "Invalid output: Expected to include (test/test rename 1.txt,test/test rename-1.txt) got (${{ steps.changed-files-all-old-new-renamed-files-1.outputs.all_old_new_renamed_files }})"
+          exit 1
+        shell: bash
+      - name: Check all_old_new_renamed_files output on windows platform
+        if: "!contains(steps.changed-files-all-old-new-renamed-files-1.outputs.all_old_new_renamed_files, 'test\\test rename 1.txt,test\\test rename-1.txt') && runner.os == 'Windows'"
+        run: |
+          echo "Invalid output: Expected to not include (test\\test rename 1.txt,test\\test rename-1.txt) got (${{ steps.changed-files-all-old-new-renamed-files-1.outputs.all_old_new_renamed_files }})"
+          exit 1
+        shell: bash
+      - name: Check the renamed_files output on non windows platform
+        if: "!contains(steps.changed-files-all-old-new-renamed-files-1.outputs.renamed_files, 'test/test rename-1.txt') && runner.os != 'Windows'"
+        run: |
+          echo "Invalid output: Expected to include (test/test rename-1.txt) got (${{ steps.changed-files-all-old-new-renamed-files-1.outputs.renamed_files }})"
+          exit 1
+        shell: bash
+      - name: Check the renamed_files output on windows platform
+        if: "!contains(steps.changed-files-all-old-new-renamed-files-1.outputs.renamed_files, 'test\\test rename-1.txt') && runner.os == 'Windows'"
+        run: |
+          echo "Invalid output: Expected to not include (test\\test rename-1.txt) got (${{ steps.changed-files-all-old-new-renamed-files-1.outputs.renamed_files }})"
+          exit 1
+        shell: bash
+
+
+      - name: Show output
+        run: |
+          echo '${{ toJSON(steps.changed-files.outputs) }}'
+        shell: bash
+
+      - name: Verify the action succeeded
+        run: |
+          if [[ "${{ steps.changed-files.outcome }}" != "success" ]]; then
+            echo "Expected: (success) got ${{ steps.changed-files.outcome }}"
+            exit 1
+          fi
+        shell: bash
+
   test-rest-api-with-base-sha-matches-pr-changes:
     name: Test changed-files with REST API matches PR changes
     runs-on: ubuntu-latest
@@ -1544,6 +1622,7 @@ jobs:
         run: |
           echo '${{ toJSON(steps.changed-files-all-old-new-renamed-files-1.outputs) }}'
         shell: bash
+        # here
       - name: Check all_old_new_renamed_files output on non windows platform
         if: "!contains(steps.changed-files-all-old-new-renamed-files-1.outputs.all_old_new_renamed_files, 'test/test rename 1.txt,test/test rename-1.txt') && runner.os != 'Windows'"
         run: |

@@ -274,10 +274,18 @@ export async function run(): Promise<void> {
 
   if (
     inputs.token &&
-    github.context.payload.pull_request?.number &&
+    (github.context.payload.pull_request?.number ||
+      (inputs.baseSha && inputs.sha)) &&
     (!hasGitDirectory || inputs.useRestApi)
   ) {
     core.info("Using GitHub's REST API to get changed files")
+    core.debug(`hasGitDirectory: ${hasGitDirectory}`)
+    core.debug(`inputs.useRestApi: ${inputs.useRestApi}`)
+    core.debug(`inputs.baseSha: ${inputs.baseSha}`)
+    core.debug(`inputs.sha: ${inputs.sha}`)
+    core.debug(
+      `github.context.payload.pull_request?.number: ${github.context.payload.pull_request?.number}`
+    )
     await warnUnsupportedRESTAPIInputs({inputs})
     await getChangedFilesFromRESTAPI({
       inputs,
@@ -287,7 +295,7 @@ export async function run(): Promise<void> {
   } else {
     if (!hasGitDirectory) {
       throw new Error(
-        `Unable to locate the git repository in the given path: ${workingDirectory}.\n Please run actions/checkout before this action (Make sure the 'path' input is correct).\n If you intend to use Github's REST API note that only pull_request* events are supported. Current event is "${github.context.eventName}".`
+        `Unable to locate the git repository in the given path: ${workingDirectory}.\n Please run actions/checkout before this action (Make sure the 'path' input is correct).\n If you intend to use Github's REST API support for non pull_request* events is experimental. Current event is "${github.context.eventName}".`
       )
     }
 
