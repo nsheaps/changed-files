@@ -274,10 +274,18 @@ export async function run(): Promise<void> {
 
   if (
     inputs.token &&
-    github.context.payload.pull_request?.number &&
+    (github.context.payload.pull_request?.number ||
+      (inputs.baseSha && inputs.sha)) &&
     (!hasGitDirectory || inputs.useRestApi)
   ) {
     core.info("Using GitHub's REST API to get changed files")
+    core.debug(`hasGitDirectory: ${hasGitDirectory}`)
+    core.debug(`inputs.useRestApi: ${inputs.useRestApi}`)
+    core.debug(`inputs.baseSha: ${inputs.baseSha}`)
+    core.debug(`inputs.sha: ${inputs.sha}`)
+    core.debug(
+      `github.context.payload.pull_request?.number: ${github.context.payload.pull_request?.number}`
+    )
     await warnUnsupportedRESTAPIInputs({inputs})
     await getChangedFilesFromRESTAPI({
       inputs,
