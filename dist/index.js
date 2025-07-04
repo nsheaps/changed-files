@@ -335,7 +335,7 @@ const getAllChangeTypeFiles = async ({ inputs, changedFiles }) => {
 };
 exports.getAllChangeTypeFiles = getAllChangeTypeFiles;
 const getChangedFilesFromGithubAPI = async ({ inputs }) => {
-    var _a, _b;
+    var _a, _b, _c, _d;
     const octokit = github.getOctokit(inputs.token, {
         baseUrl: inputs.apiUrl
     });
@@ -353,11 +353,15 @@ const getChangedFilesFromGithubAPI = async ({ inputs }) => {
     // If we're in a PR and you want to see changed files from the PR to another base, or another sha to the PR's base
     // we can use the compare API instead of the PR API. This can be useful when you have a stack of PRs and a PR in
     // the middle of the stack changed some files, and you want subsequent PRs to see the changes since the default
-    // branch instead of the PR's base. If there is a git directory, we can use that instead
-    if (((_a = github.context.payload.pull_request) === null || _a === void 0 ? void 0 : _a.number) &&
-        (inputs.baseSha || inputs.sha)) {
-        const headSha = inputs.sha || github.context.payload.pull_request.head.sha;
-        const baseSha = inputs.baseSha || github.context.payload.pull_request.base.sha;
+    // branch instead of the PR's base.
+    // Alternatively, if you provide both the sha and baseSha, we can use the compare API to get the changed files as
+    // well, useful with push events by sending ${{ github.sha }} and ${{ github.sha }}~1.
+    // If there is a git directory, we can use that instead
+    if ((((_a = github.context.payload.pull_request) === null || _a === void 0 ? void 0 : _a.number) &&
+        (inputs.baseSha || inputs.sha)) ||
+        (inputs.baseSha && inputs.sha)) {
+        const headSha = inputs.sha || ((_b = github.context.payload.pull_request) === null || _b === void 0 ? void 0 : _b.head.sha);
+        const baseSha = inputs.baseSha || ((_c = github.context.payload.pull_request) === null || _c === void 0 ? void 0 : _c.base.sha);
         // Check if base_sha and head_sha are identical
         if (baseSha === headSha) {
             core.error(`Similar commit hashes detected: base_sha: ${baseSha} is equivalent to the head_sha: ${headSha}.`);
@@ -400,7 +404,7 @@ const getChangedFilesFromGithubAPI = async ({ inputs }) => {
         const options = octokit.rest.pulls.listFiles.endpoint.merge({
             owner: github.context.repo.owner,
             repo: github.context.repo.repo,
-            pull_number: (_b = github.context.payload.pull_request) === null || _b === void 0 ? void 0 : _b.number,
+            pull_number: (_d = github.context.payload.pull_request) === null || _d === void 0 ? void 0 : _d.number,
             per_page: 100
         });
         const paginatedResponse = await octokit.paginate(options);

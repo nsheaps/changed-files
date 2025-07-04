@@ -464,14 +464,18 @@ export const getChangedFilesFromGithubAPI = async ({
   // If we're in a PR and you want to see changed files from the PR to another base, or another sha to the PR's base
   // we can use the compare API instead of the PR API. This can be useful when you have a stack of PRs and a PR in
   // the middle of the stack changed some files, and you want subsequent PRs to see the changes since the default
-  // branch instead of the PR's base. If there is a git directory, we can use that instead
+  // branch instead of the PR's base.
+  // Alternatively, if you provide both the sha and baseSha, we can use the compare API to get the changed files as
+  // well, useful with push events by sending ${{ github.sha }} and ${{ github.sha }}~1.
+  // If there is a git directory, we can use that instead
   if (
-    github.context.payload.pull_request?.number &&
-    (inputs.baseSha || inputs.sha)
+    (github.context.payload.pull_request?.number &&
+      (inputs.baseSha || inputs.sha)) ||
+    (inputs.baseSha && inputs.sha)
   ) {
-    const headSha = inputs.sha || github.context.payload.pull_request.head.sha
+    const headSha = inputs.sha || github.context.payload.pull_request?.head.sha
     const baseSha =
-      inputs.baseSha || github.context.payload.pull_request.base.sha
+      inputs.baseSha || github.context.payload.pull_request?.base.sha
 
     // Check if base_sha and head_sha are identical
     if (baseSha === headSha) {
